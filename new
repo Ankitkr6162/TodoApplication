@@ -1,0 +1,21 @@
+    public static final String INDEX_NAME_IX_CODE_SYSTEM_VALUE = "ix_code_code_system_value_set_name_itemid";
+    public static final String INDEX_NAME_IX_CODE = "ix_code";
+    public static final String INDEX_NAME_IX_CODE_SYSTEM = "ix_code_system";
+    public static final String INDEX_NAME_IX_VALUE_SET_NAME = "ix_value_set_name";
+    public static final String INDEX_NAME_IX_ITEMID = "ix_itemid";
+    public static final String UDSFLATTABLEYEAR_ITEMKEY = "udsflattablejobyear";
+    public static final String COLUMN_DL_CUBE_INDEX_COUNT = "dl_cube_index_count";
+    public static final String NO_ACTIVE_YEAR_FOR_UDSFLATTABLEJOB_ITEMKEY = "No active year found for udsflattablejobyear itemkey";
+    public static final String[] DL_CUBE_CMS_DATA_INDEXES = {"ix_code_code_system_value_set_name_itemid", "ix_code", "ix_code_system", "ix_value_set_name", "ix_itemid"};
+
+
+
+    private void ensureDlCubeCmsDataIndexesExist() {
+        String[] indexes = ExcelConstants.DL_CUBE_CMS_DATA_INDEXES;
+        for (String index : indexes) {
+            if (!excelToTableDao.isIndexPresentOnDlCubeCmsData(index)) {
+                LOGGER.info("Index missing: " + index + ". Creating index...");
+                excelToTableDao.createIndexOnDlCubeCmsData(index);
+            }
+        }
+    }
