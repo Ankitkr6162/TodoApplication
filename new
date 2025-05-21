@@ -19,3 +19,327 @@
             }
         }
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package webemr.analytics.cmsdata.dao
+
+import catalog.Root
+import helpers.DbUtil
+import mockit.Mock
+import mockit.MockUp
+import spock.lang.Shared
+import spock.lang.Unroll
+import util.ECWSpec
+import webemr.analytics.cmsdata.exception.InvalidExcelException
+import webemr.analytics.cmsdata.model.CMS
+import webemr.analytics.cmsdata.model.CMSData
+import java.sql.Connection
+import java.sql.PreparedStatement
+import java.sql.SQLException
+
+class ExcelToTableDaoSpec extends ECWSpec {
+    def excelToTableDao = new ExcelToTableDao()
+
+    @Shared
+    Map<String, List<CMSData>> cmsDataMap = null;
+    @Shared
+    ArrayList list = new ArrayList();
+    @Shared
+    String intialCMSItemkeyValue;
+
+
+    MockUp<Root> mockToThrowException
+
+    static def content = {
+        items(itemID: 90899901, itemName: 'Test_Item2', parentID: 237301, vmid: getVMId(), drugNameId: 3, keyName: 'CPTCodes', deleteflag: 0)
+        items(itemID: 90899902, itemName: 'Test_Item3', parentID: 237301, vmid: getVMId(), drugNameId: 3, keyName: 'CPTCodes', deleteflag: 0)
+        itemdetail(itemID: 90899901, propId: 13, value: 'D80.4')
+        labloinccodes(itemid: 90899902, CODE: '59576-9')
+        dl_cube_cms_data(id: 544343, CATEGORY_ID: 1, CMS_ID: "CMS117v9", QDM_Category: "Condition/Diagnosis/Problem", CODE: "D80.4", DESCRIPTION: "Test Data", CODE_SYSTEM: "ICD10CM", VALUE_SET_NAME: "Disorders of the Immune System", itemId: 656, updatedate: "2020-10-26 17:17:08");
+        dl_cube_cms_data(id: 544344, CATEGORY_ID: 2, CMS_ID: "CMS117v9", QDM_Category: "Condition/Diagnosis/Problem", CODE: "59576-9", DESCRIPTION: "Test Data", CODE_SYSTEM: "LOINC", VALUE_SET_NAME: "Body mass index (BMI) [Percentile]", itemId: 656, updatedate: "2020-10-26 17:17:08");
+    }
+
+    def setupSpec() {
+        db = DbUtil.getSqlInstance()
+
+        def con = db.getConnection()
+        def pstmt = con.prepareStatement("SELECT value from itemkeys WHERE name = ?")
+        pstmt.setString(1, 'udsflattablejobyear')
+        def rs = pstmt.executeQuery()
+        if (rs.next()) {
+            intialCMSItemkeyValue = rs.getString(1)
+        }
+        rs.close()
+        pstmt.close()
+    }
+
+    def setup() {
+        db = DbUtil.getSqlInstance()
+
+        def con = db.getConnection()
+        def pstmt = con.prepareStatement("UPDATE itemkeys SET VALUE = ? WHERE NAME = ?")
+        pstmt.setString(1, '2024')
+        pstmt.setString(2, 'udsflattablejobyear')
+        pstmt.executeUpdate()
+        pstmt.close()
+    }
+
+    def 'API to get CMS List'() {
+        when: "excelToTableDao.getCMSList is called"
+        List<CMS> list = excelToTableDao.getCMSList()
+
+        then: "It should return List<CMS> data"
+        list.size() >= 0;
+
+    }
+
+    def 'API to get CMS List - Exception'() {
+        given:
+        mockRootToThrowException()
+
+        when: "excelToTableDao.getCMSList is called"
+        List<CMS> list = excelToTableDao.getCMSList()
+
+        then: "It should throw exception"
+        list.size() == 0
+
+        cleanup:
+        mockToThrowException.tearDown()
+
+    }
+
+    def 'API to insert In Batch CMSData'() {
+        given: "Map<String, List<CMSData>> data,List data"
+        db.executeInsert("insert into DJ_CTL_CMS (CATEGORY_ID,CMS_NAME) values (333, 'CMS117v9-Test - 6B Section C')")
+        List<CMS> cmsList = excelToTableDao.getCMSList();
+
+        when: "excelToTableDao.insertInBatchCMSData is called"
+        Boolean isInsert = excelToTableDao.insertInBatchCMSData(cmsDataMap, cmsList);
+
+        then: "It should return List<CMS> data"
+        isInsert == result
+
+        cleanup:
+        clearData()
+
+        where:
+        cmsDataMap                                                        | result
+        getMapOfCmsData("CMS117v9-Test - 6B Section C", list, "CMS117v9") | true
+
+    }
+
+    def 'API to insert In Batch CMSData throw  - Exception'() {
+        given: "Map<String, List<CMSData>> data,List data"
+        Map<String, List<CMSData>> cmsDataMap = null
+        List<CMS> cmsList = null
+
+        when: "excelToTableDao.insertInBatchCMSData is called"
+        excelToTableDao.insertInBatchCMSData(cmsDataMap, cmsList)
+
+        then: "It should throw exception"
+        thrown(InvalidExcelException)
+
+    }
+
+    def 'API to insert In Batch CMSData  - Exception'() {
+        given: "Map<String, List<CMSData>> data,List data"
+        Map<String, List<CMSData>> cmsDataMap = null;
+        List<CMS> cmsList = null
+        mockRootToThrowException()
+
+        when: "excelToTableDao.insertInBatchCMSData is called"
+        excelToTableDao.insertInBatchCMSData(cmsDataMap, cmsList)
+
+        then: "It should throw exception"
+        thrown(InvalidExcelException)
+
+        cleanup:
+        mockToThrowException.tearDown()
+
+    }
+
+    @Unroll
+    def 'API to get Item Ids For Code'() {
+        given: "CMSDATA object"
+
+        when: "excelToTableDao.getItemIdsForCode is called"
+        List<Integer> list = excelToTableDao.getItemIdsForCode(cmsdata);
+
+        then: "It should return List<Integer> data "
+        list.size() >= 0
+
+        where:
+        cmsdata                                           | result
+        new CMSData(codeSystem: "ICD10CM", code: "D80.4") | _
+        new CMSData(codeSystem: "LOINC", code: "59576-9") | _
+    }
+
+    def 'API to get Item Ids For Code - Exception'() {
+        given: "CMSDATA object"
+        mockRootToThrowException()
+
+        when: "excelToTableDao.getItemIdsForCode is called"
+        List<Integer> list = excelToTableDao.getItemIdsForCode(cmsdata);
+
+        then: "It should throw exception"
+        list.size() == 0
+
+        cleanup:
+        mockToThrowException.tearDown()
+
+        where:
+        cmsdata                                           | result
+        new CMSData(codeSystem: "ICD10CM", code: "D80.4") | _
+    }
+
+    def 'API to insert Categories Data'() {
+        given: "CMSDATA object"
+
+        when: "excelToTableDao.insertCategoriesData is called"
+        excelToTableDao.insertCategoriesData(cmsdata2);
+
+        then: "It should not return any data "
+
+        cleanup:
+        db.execute("DELETE FROM DJ_CTL_CMS WHERE CMS_NAME IN ('CMS117v8-Test','CMS117v9-Test - 6B Section C')");
+
+        where:
+        cmsdata2                                                          | result
+        getMapOfCmsData("CMS117v8-Test", list, "CMS117v8")                | _
+        getMapOfCmsData("CMS117v9-Test - 6B Section C", list, "CMS117v9") | _
+    }
+
+    def 'API to insert Categories Data - Exception'() {
+        given: "CMSDATA object"
+        mockRootToThrowException()
+
+        when: "excelToTableDao.insertCategoriesData is called"
+        excelToTableDao.insertCategoriesData(cmsdata3);
+
+        then: "It should throw exception"
+
+        cleanup:
+        mockToThrowException.tearDown()
+
+        where:
+        cmsdata3                                                          | result
+        getMapOfCmsData("CMS117v9-Test - 6B Section C", list, "CMS117v9") | _
+    }
+
+    def 'API to add CMS Data Batch - Exception'() {
+        given: "CMSDATA object,CMS object,prepareStatement object"
+        def mockRoot = new Root()
+        Connection mockConnection = Mock(Connection.class);
+        PreparedStatement mockPreparedStatement = Mock(PreparedStatement.class)
+        mockRoot.con = mockConnection
+        mockRoot.con.prepareStatement(*_) >> mockPreparedStatement
+        mockPreparedStatement.addBatch() >> { throw new SQLException(); }
+        CMSData cmsdata = new CMSData()
+        CMS cms = new CMS()
+        cms.setCategoryId(423)
+
+        when: "excelToTableDao.addCMSDataBatch is called"
+        excelToTableDao.addCMSDataBatch(cmsdata, cms, mockPreparedStatement);
+
+        then: "It should throw exception"
+
+        cleanup:
+        mockPreparedStatement.close()
+
+    }
+
+    def 'API to delete Data - Exception'() {
+        given:
+        mockRootToThrowException()
+
+        when: "excelToTableDao.deleteData is called"
+        excelToTableDao.deleteData();
+
+        then: "It should throw exception"
+
+        cleanup:
+        mockToThrowException.tearDown()
+
+    }
+
+    def getCmsDataObject(String cmsId, String valueSetName, String qDMcategory, String code, String description, String codesystem) {
+        CMSData cmsdata = new CMSData();
+        cmsdata.setcMSID(cmsId);
+        cmsdata.setValueSetName(valueSetName);
+        cmsdata.setqDMCategory(qDMcategory);
+        cmsdata.setCode(code);
+        cmsdata.setDescription(description);
+        cmsdata.setCodeSystem(codesystem);
+        return cmsdata
+    }
+
+    def getMapOfCmsData(String cmsId, ArrayList list, String cmsName) {
+        Map<String, List<CMSData>> cmsDataMap = new HashMap<>()
+        list.add(getCmsDataObject(cmsName, "Anaphylactic Reaction to Common Baker's Yeast", "Condition/Diagnosis/Problem", "34015007", "Bakers asthma (disorder)", 'SNOMEDCT'));
+        list.add(getCmsDataObject(cmsName, "Anaphylactic Reaction to Common Baker's Yeast", "Condition/Diagnosis/Problem", "419447004", "Allergic reaction caused by flour dust (disorder)", 'SNOMEDCT'));
+        cmsDataMap.put(cmsId, list)
+        return cmsDataMap;
+    }
+
+    private static clearData() {
+        db.execute("DELETE FROM dl_cube_cms_data WHERE CMS_ID IN ('CMS117v9')")
+        db.execute("DELETE FROM DJ_CTL_CMS WHERE CMS_NAME IN ('CMS117v8-Test','CMS117v9-Test - 6B Section C')")
+    }
+
+    def mockRootToThrowException() {
+        mockToThrowException = new MockUp<Root>() {
+            @Mock
+            public static catalog.Root createDbConnection(catalog.Root oRootCon) throws Exception {
+                throw new Exception("Test Exception Case")
+            }
+        }
+    }
+
+    def cleanup() {
+        db?.close()
+        excelToTableDao?.closeConnection()
+
+    }
+
+    def cleanupSpec() {
+        db = DbUtil.getSqlInstance()
+
+        def con = db.getConnection()
+        def pstmt = con.prepareStatement("UPDATE itemkeys SET VALUE = ? WHERE NAME = ?")
+        pstmt.setString(1, intialCMSItemkeyValue)
+        pstmt.setString(2, 'udsflattablejobyear')
+        pstmt.executeUpdate()
+        pstmt.close()
+
+        db?.close()
+    }
+}
+
