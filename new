@@ -343,3 +343,21 @@ class ExcelToTableDaoSpec extends ECWSpec {
     }
 }
 
+
+
+
+
+
+def setup() {
+    db = DbUtil.getSqlInstance()
+
+    db.getConnection().withCloseable { con ->
+        con.prepareStatement("UPDATE itemkeys SET VALUE = ? WHERE NAME = ?").withCloseable { pstmt ->
+            pstmt.setString(1, '2024')
+            pstmt.setString(2, 'udsflattablejobyear')
+            pstmt.executeUpdate()
+        }
+    }
+}
+
+
