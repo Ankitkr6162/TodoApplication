@@ -1,0 +1,215 @@
+SELECT ecd.qid, 
+(CASE WHEN ecd.qid = 201 THEN 'Cervical Cancer Screening' 
+WHEN ecd.qid = 203 THEN 'HIV Screening' 
+WHEN ecd.qid = 205 THEN 'Adult BMI' 
+WHEN ecd.qid = 208 THEN 'Colorectal Cancer Screening' 
+WHEN ecd.qid = 213 THEN 'Childhood BMI' 
+WHEN ecd.qid = 218 THEN 'IVD' 
+WHEN ecd.qid = 220 THEN 'Depression Screening' 
+WHEN ecd.qid = 223 THEN 'Depression Remission' 
+WHEN ecd.qid = 225 THEN 'Diabetes' 
+WHEN ecd.qid = 228 THEN 'Hypertension' 
+WHEN ecd.qid = 230 THEN 'Statin Therapy' 
+WHEN ecd.qid = 232 THEN 'Tobacco Screening' 
+WHEN ecd.qid = 235 THEN 'Breast Cancer Screening' 
+WHEN ecd.qid = 240 THEN 'SUD Inititation' 
+WHEN ecd.qid = 242 THEN 'SUD Engagement' 			
+END) AS 'Measure_Name', 
+p.pid AS 'Patient_id', 
+(CASE WHEN ecd.qid=225 AND C3=0 THEN 'ACHIEVED' 
+WHEN ecd.qid=225 AND C3=1 THEN 'NOT_ACHIEVED' 
+WHEN C3=0 THEN 'NOT_ACHIEVED' 
+WHEN C3=1 THEN 'ACHIEVED' 
+END) AS 'Compliance Status', 
+(CASE WHEN ecd.qid=225 AND C3=1 THEN ORDERSET.ENCOUNTERID 
+WHEN ecd.qid=225 AND C3=0 THEN 0 
+WHEN C3=1 THEN ORDERSET.ENCOUNTERID 
+WHEN C3=0 THEN ORDERSET.ENCOUNTERID 
+END) AS OrdersetID, 
+(CASE WHEN ecd.qid=225 AND C3=1 THEN ORDERSET.DESCRIPTION 
+WHEN ecd.qid=225 AND C3=0 THEN '' 
+WHEN C3=0 THEN ORDERSET.DESCRIPTION 
+WHEN C3=1 THEN '' 
+END) AS ItemName 
+FROM ebo_cde_detail ecd 
+INNER JOIN patients p ON p.pid = ecd.c2 
+LEFT JOIN  
+(SELECT ORDERSETS.ENCOUNTERID, ORDERSETS.DESCRIPTION, 
+CASE 
+WHEN ORDERSETS.Description = 'UDS_Cervical_Cancer_Screening' THEN 201 
+WHEN ORDERSETS.Description = 'UDS_Breast_Cancer_Screening' THEN 235 
+WHEN ORDERSETS.Description = 'UDS_Childhood_BMI' THEN 213 
+WHEN ORDERSETS.Description = 'UDS_Adult_BMI' THEN 205 
+WHEN ORDERSETS.Description = 'UDS_Tobacco_Cessation' THEN 232 
+WHEN ORDERSETS.Description = 'UDS_Statin_Therapy' THEN 230 
+WHEN ORDERSETS.Description = 'UDS_IVD' THEN 218 
+WHEN ORDERSETS.Description = 'UDS_Colorectal_Cancer_Screening' THEN 208 
+WHEN ORDERSETS.Description = 'UDS_HIV_Screening' THEN 203 
+WHEN ORDERSETS.Description = 'UDS_Depression_Screening' THEN 220 
+WHEN ORDERSETS.Description = 'UDS_Depression_Remission' THEN 223 
+WHEN ORDERSETS.Description = 'UDS_Hypertension' THEN 228 
+WHEN ORDERSETS.Description = 'UDS_Diabetes' THEN 225 
+WHEN ORDERSETS.Description = 'UDS_SUD_Initiation' THEN 240 
+WHEN ORDERSETS.Description = 'UDS_SUD_Enagagement' THEN 242 
+END AS 'QID' 
+FROM ORDERSETS 
+INNER JOIN  
+(SELECT MAX(ENCOUNTERID) ENCOUNTERID, DESCRIPTION 
+FROM ORDERSETS 
+WHERE ORDERSETS.DELETEFLAG = 0 
+GROUP BY DESCRIPTION 
+) MAXOS ON MAXOS.ENCOUNTERID = ORDERSETS.ENCOUNTERID 
+) ORDERSET ON ORDERSET.QID = ecd.qid AND ecd.cdeid=2 AND ((ecd.qid=225 AND ecd.c3=1) OR (ecd.qid<>225 AND c3=0)) 
+INNER JOIN (
+			SELECT C2,qid, MAX(ID) AS max_id
+			FROM ebo_cde_detail
+			WHERE qid  IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND cdeid = 2
+			GROUP BY C2,qid
+			) latest ON latest.C2 = ecd.C2 AND Latest.max_id = ecd.id 
+WHERE ecd.qid  IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND ecd.cdeid = 2 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SELECT  
+            (CASE WHEN C3 = 1 AND ecd.qid = 213 THEN '' 
+            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Vitals Not Taken' 
+            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Nutrition Counseling Pending' 
+            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Nutrition Counseling Done' 
+            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 = '' OR C7 IS NULL) THEN 'Physical Activity Done' 
+            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) AND (C7 = '' OR C7 IS NULL) THEN 'Vitals Not Taken' 
+            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Vitals Not Taken' 
+            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 = '' OR C7 IS NULL) THEN 'Vitals Not Taken' 
+            WHEN C3 = 1 AND ecd.qid = 205 THEN '' 
+            WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Vitals Not Taken' 
+            WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) THEN 'Vitals Not Taken' 
+            WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
+            WHEN C3 = 1 AND ecd.qid = 232 THEN '' 
+            WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Screening Not Done' 
+            WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) THEN 'Screening Not Done' 
+            WHEN ecd.qid = 232 AND (C5 = '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
+            WHEN C3 = 1 AND ecd.qid = 201 THEN '' 
+            WHEN ecd.qid = 201 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' 
+            WHEN C3 = 1 AND ecd.qid = 235 THEN '' 
+            WHEN ecd.qid = 235 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' 
+            WHEN C3 = 1 AND ecd.qid = 208 THEN '' 
+            WHEN ecd.qid = 208 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' 
+            WHEN C3 = 1 AND ecd.qid = 230 THEN '' 
+            WHEN ecd.qid = 230 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Medication not Prescribed' 
+            WHEN C3 = 1 AND ecd.qid = 218 THEN '' 
+            WHEN ecd.qid = 218 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Medication not Prescribed' 
+            WHEN C3 = 1 AND ecd.qid = 203 THEN '' 
+            WHEN ecd.qid = 203 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' 
+            WHEN C3 = 1 AND ecd.qid = 228 THEN '' 
+            WHEN ecd.qid = 228 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Vital Not Taken' 
+            WHEN C3 = 1 AND ecd.qid = 220 THEN '' 
+            WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) THEN 'Screening not Done' 
+            WHEN ecd.qid = 220 AND (C5 = '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
+            WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Screening not Done' 
+            WHEN C3 = 1 AND ecd.qid = 223 THEN '' 
+            WHEN ecd.qid = 223 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Remission Screening Not Done' 
+            WHEN c3= 0 AND ecd.qid  = 225 THEN '' 
+            WHEN c3 = 1 AND ecd.qid = 225 AND c17 > 9 THEN 'HbA1c Value > 9' 
+            WHEN C3 = 1 AND ecd.qid = 225 AND (c17 = '' OR C17 IS NULL) THEN 'No HbA1c Ordered' 
+			WHEN C3 = 1 AND ecd.qid = 240 THEN ''
+			WHEN ecd.qid = 240 AND C3 = 0 and C27 = 0 THEN 'Treatment Inititation Pending'
+			WHEN ecd.qid = 240 AND C3 = 0 and C27 > 0 THEN 'Compliance Period Closed: No further action possible'
+			WHEN C3 = 1 AND ecd.qid = 242 THEN ''
+			WHEN ecd.qid = 242 AND C3 = 0 AND C27 = 0 AND C26 = 0 THEN 'Patient Engagement Required'
+			WHEN ecd.qid = 242 AND C3 = 0 AND C27 = 0 AND C26 = 1 THEN 'One More Engagement Required'
+			WHEN ecd.qid = 242 AND C3 = 0 AND C27 <> 0 THEN 'Compliance Period Closed: No further action possible'
+            END 
+            ) AS 'Supporting_Facts', 
+            (CASE WHEN C3 = 1 AND ecd.qid = 213 THEN '' 
+            WHEN ecd.qid = 213 AND (C5 <> ''OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Nutrition Counseling and Physical Activity Pending' 
+            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Physical Activity Pending' 
+            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Physical Activity Pending' 
+            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 =  '' OR C7 IS NULL) THEN 'Nutrition Counseling Pending' 
+            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 =  '' OR C7 IS NULL) THEN 'Nutrition Counseling and Physical Activity Done' 
+            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Physical Activity Pending' 
+            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 =  '' OR C7 IS NULL) THEN 'Nutrition Counselling Pending' 
+            WHEN C3 = 1 AND ecd.qid = 205 THEN '' 
+            WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
+            WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) THEN 'Follow Up Completed ' 
+            WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 =  0 THEN 'Vitals Taken-Normal Weight' 
+            WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 =  1 THEN 'Vitals Taken-Under Weight' 
+            WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 =  2 THEN 'Vitals Taken-Over Weight' 
+            WHEN C3 = 1 AND ecd.qid = 232 THEN '' 
+            WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
+            WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) THEN 'Follow Up Completed' 
+            WHEN ecd.qid = 232 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Screening Completed' 
+            WHEN c3= 0 AND ecd.qid  = 225 THEN '' 
+            WHEN c3 = 1 AND ecd.qid = 225 AND (C17 <> '' OR C17 IS NOT NULL) THEN C17 
+            WHEN C3 = 1 AND ecd.qid = 225 AND (C17 = '' OR C17 IS NULL) THEN 'No HbA1c Value' 
+            WHEN ecd.qid = 220 AND C3 =  1  AND C9 = 0 THEN '' 
+            WHEN ecd.qid = 220 AND C3 =  1  AND C9 = 1 THEN '' 
+            WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) THEN 'Follow Up Completed' 
+            WHEN ecd.qid = 220 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 = 0 THEN 'Screening Completed-Negative' 
+            WHEN ecd.qid = 220 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 = 1 THEN 'Screening Completed-Positive' 
+            WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' AND C6 IS NOT NULL) THEN 'Follow Up Not Done' 
+            END 
+            ) AS 'Date',  
+            (CASE  
+            WHEN ecd.qid  = 201 THEN 'Cervical Cancer Screening' 
+            WHEN ecd.qid  = 203 THEN 'HIV Screening' 
+            WHEN ecd.qid  = 205 THEN 'Adult BMI' 
+            WHEN ecd.qid  = 208 THEN 'Colorectal Cancer Screening' 
+            WHEN ecd.qid  = 213 THEN 'Childhood BMI' 
+            WHEN ecd.qid  = 218 THEN 'IVD' 
+            WHEN ecd.qid  = 220 THEN 'Depression Screening' 
+            WHEN ecd.qid  = 223 THEN 'Depression Remission' 
+            WHEN ecd.qid  = 225 THEN 'Diabetes' 
+            WHEN ecd.qid  = 228 THEN 'Hypertension' 
+            WHEN ecd.qid  = 230 THEN 'Statin Therapy' 
+            WHEN ecd.qid  = 232 THEN 'Tobacco Screening' 
+            WHEN ecd.qid  = 235 THEN 'Breast Cancer Screening' 
+			WHEN ecd.qid  = 240 THEN 'SUD Initiation' 
+			WHEN ecd.qid  = 242 THEN 'SUD Engagement' 
+            END) AS 'Measure_Name', 
+            p.pid AS 'Patient_id' 
+            FROM ebo_cde_detail ecd 
+            INNER JOIN patients p ON p.pid = ecd.c2 
+			INNER JOIN (
+			SELECT C2,qid, MAX(ID) AS max_id
+			FROM ebo_cde_detail
+			WHERE qid  IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND cdeid = 2
+			GROUP BY C2,qid
+			) latest ON latest.C2 = ecd.C2 AND Latest.max_id = ecd.id 
+            WHERE ecd.qid IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) 
+			
+			
