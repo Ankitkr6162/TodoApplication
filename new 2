@@ -1,72 +1,242 @@
-SELECT ecd.qid, 
-(CASE WHEN ecd.qid = 201 THEN 'Cervical Cancer Screening' 
-WHEN ecd.qid = 203 THEN 'HIV Screening' 
-WHEN ecd.qid = 205 THEN 'Adult BMI' 
-WHEN ecd.qid = 208 THEN 'Colorectal Cancer Screening' 
-WHEN ecd.qid = 213 THEN 'Childhood BMI' 
-WHEN ecd.qid = 218 THEN 'IVD' 
-WHEN ecd.qid = 220 THEN 'Depression Screening' 
-WHEN ecd.qid = 223 THEN 'Depression Remission' 
-WHEN ecd.qid = 225 THEN 'Diabetes' 
-WHEN ecd.qid = 228 THEN 'Hypertension' 
-WHEN ecd.qid = 230 THEN 'Statin Therapy' 
-WHEN ecd.qid = 232 THEN 'Tobacco Screening' 
-WHEN ecd.qid = 235 THEN 'Breast Cancer Screening' 
-WHEN ecd.qid = 240 THEN 'SUD Inititation' 
-WHEN ecd.qid = 242 THEN 'SUD Engagement' 			
-END) AS 'Measure_Name', 
-p.pid AS 'Patient_id', 
-(CASE WHEN ecd.qid=225 AND C3=0 THEN 'ACHIEVED' 
-WHEN ecd.qid=225 AND C3=1 THEN 'NOT_ACHIEVED' 
-WHEN C3=0 THEN 'NOT_ACHIEVED' 
-WHEN C3=1 THEN 'ACHIEVED' 
-END) AS 'Compliance Status', 
-(CASE WHEN ecd.qid=225 AND C3=1 THEN ORDERSET.ENCOUNTERID 
-WHEN ecd.qid=225 AND C3=0 THEN 0 
-WHEN C3=1 THEN ORDERSET.ENCOUNTERID 
-WHEN C3=0 THEN ORDERSET.ENCOUNTERID 
-END) AS OrdersetID, 
-(CASE WHEN ecd.qid=225 AND C3=1 THEN ORDERSET.DESCRIPTION 
-WHEN ecd.qid=225 AND C3=0 THEN '' 
-WHEN C3=0 THEN ORDERSET.DESCRIPTION 
-WHEN C3=1 THEN '' 
-END) AS ItemName 
-FROM ebo_cde_detail ecd 
-INNER JOIN patients p ON p.pid = ecd.c2 
-LEFT JOIN  
-(SELECT ORDERSETS.ENCOUNTERID, ORDERSETS.DESCRIPTION, 
-CASE 
-WHEN ORDERSETS.Description = 'UDS_Cervical_Cancer_Screening' THEN 201 
-WHEN ORDERSETS.Description = 'UDS_Breast_Cancer_Screening' THEN 235 
-WHEN ORDERSETS.Description = 'UDS_Childhood_BMI' THEN 213 
-WHEN ORDERSETS.Description = 'UDS_Adult_BMI' THEN 205 
-WHEN ORDERSETS.Description = 'UDS_Tobacco_Cessation' THEN 232 
-WHEN ORDERSETS.Description = 'UDS_Statin_Therapy' THEN 230 
-WHEN ORDERSETS.Description = 'UDS_IVD' THEN 218 
-WHEN ORDERSETS.Description = 'UDS_Colorectal_Cancer_Screening' THEN 208 
-WHEN ORDERSETS.Description = 'UDS_HIV_Screening' THEN 203 
-WHEN ORDERSETS.Description = 'UDS_Depression_Screening' THEN 220 
-WHEN ORDERSETS.Description = 'UDS_Depression_Remission' THEN 223 
-WHEN ORDERSETS.Description = 'UDS_Hypertension' THEN 228 
-WHEN ORDERSETS.Description = 'UDS_Diabetes' THEN 225 
-WHEN ORDERSETS.Description = 'UDS_SUD_Initiation' THEN 240 
-WHEN ORDERSETS.Description = 'UDS_SUD_Enagagement' THEN 242 
-END AS 'QID' 
-FROM ORDERSETS 
-INNER JOIN  
-(SELECT MAX(ENCOUNTERID) ENCOUNTERID, DESCRIPTION 
-FROM ORDERSETS 
-WHERE ORDERSETS.DELETEFLAG = 0 
-GROUP BY DESCRIPTION 
-) MAXOS ON MAXOS.ENCOUNTERID = ORDERSETS.ENCOUNTERID 
-) ORDERSET ON ORDERSET.QID = ecd.qid AND ecd.cdeid=2 AND ((ecd.qid=225 AND ecd.c3=1) OR (ecd.qid<>225 AND c3=0)) 
-INNER JOIN (
-			SELECT C2,qid, MAX(ID) AS max_id
-			FROM ebo_cde_detail
-			WHERE qid  IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND cdeid = 2
-			GROUP BY C2,qid
-			) latest ON latest.C2 = ecd.C2 AND Latest.max_id = ecd.id 
-WHERE ecd.qid  IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND ecd.cdeid = 2 
+package analytics.rcp.uds.util;
+
+import analytics.rcp.model.Measure;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+import static analytics.rcp.uds.constant.UdsCdeConstants.*;
+
+public class UdsCdeUtil {
+    private static final Map<Integer, String> measureNames;
+
+    static {
+        measureNames = new HashMap<>();
+        measureNames.put(201, "Cervical Cancer Screening");
+        measureNames.put(203, "HIV Screening");
+        measureNames.put(205, "Adult BMI");
+        measureNames.put(208, "Colorectal Cancer Screening");
+        measureNames.put(213, "Childhood BMI");
+        measureNames.put(218, "IVD");
+        measureNames.put(220, "Depression Screening");
+        measureNames.put(223, "Depression Remission");
+        measureNames.put(225, "Diabetes");
+        measureNames.put(228, "Hypertension");
+        measureNames.put(230, "Statin Therapy");
+        measureNames.put(232, "Tobacco Screening");
+        measureNames.put(235, "Breast Cancer Screening");
+    }
+
+    public String getMeasureName(int qid) {
+        return measureNames.getOrDefault(qid, "");
+    }
+
+
+    public String getSupportingFact(int qid, String c3, String c5, String c6, String c7, String c17) {
+        if ("0".equals(c3)) {
+            return handleSupportingFactsC3EqualsZero(qid, c5, c6, c7);
+        } else if ("1".equals(c3) && qid == 225) {
+            return handleSupportingFactsC3EqualsOne(c17);
+        }
+        return "";
+    }
+
+    private String handleSupportingFactsC3EqualsZero(int qid, String c5, String c6, String c7) {
+        Map<Integer, Function<String[], String>> qidHandlers = new HashMap<>();
+        qidHandlers.put(213, this::handleChildhoodBMISupportingFacts);
+        qidHandlers.put(205, this::handleAdultBMISupportingFacts);
+        qidHandlers.put(232, this::handleTobaccoScreeningSupportingFacts);
+        qidHandlers.put(201, this::handleSupportingFactsC5EqualsOne);
+        qidHandlers.put(235, this::handleSupportingFactsC5EqualsOne);
+        qidHandlers.put(208, this::handleSupportingFactsC5EqualsOne);
+        qidHandlers.put(230, this::handleSupportingFactsForMedicationNotPrescribed);
+        qidHandlers.put(218, this::handleSupportingFactsForMedicationNotPrescribed);
+        qidHandlers.put(203, this::handleSupportingFactsC5EqualsOne);
+        qidHandlers.put(228, this::handleSupportingFactsForVitalNotTaken);
+        qidHandlers.put(220, this::handleSupportingFactsForDepressionScreening);
+        qidHandlers.put(223, this::handleSupportingFactsForDepressionRemission);
+
+        Function<String[], String> handler = qidHandlers.get(qid);
+        if (handler != null) {
+            return handler.apply(new String[]{c5, c6, c7});
+        }
+        return "";
+    }
+
+    private String handleSupportingFactsC3EqualsOne(String c17) {
+        if (isEmpty(c17)) return "No HbA1c Ordered";
+        int c17Value = Integer.parseInt(c17);
+        return c17Value > 9 ? "HbA1c Value > 9" : "";
+    }
+
+    private String handleChildhoodBMISupportingFacts(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        String c7 = params[2];
+        if (isNotEmpty(c5) && isNotEmpty(c6) && isNotEmpty(c7)) return VITALS_NOT_TAKEN_SUPPORTING_FACT;
+        if (isEmpty(c5) && isNotEmpty(c6) && isNotEmpty(c7)) return "Nutrition Counseling Pending";
+        if (isEmpty(c5) && isEmpty(c6) && isNotEmpty(c7)) return "Nutrition Counseling Done";
+        if (isEmpty(c5) && isNotEmpty(c6) && isEmpty(c7)) return "Physical Activity Done";
+        return VITALS_NOT_TAKEN_SUPPORTING_FACT;
+    }
+
+    private String handleAdultBMISupportingFacts(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return VITALS_NOT_TAKEN_SUPPORTING_FACT;
+        if (isNotEmpty(c5) && isEmpty(c6)) return VITALS_NOT_TAKEN_SUPPORTING_FACT;
+        return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+    }
+
+    private String handleTobaccoScreeningSupportingFacts(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return SCREENING_NOT_DONE_SUPPORTING_FACT;
+        if (isNotEmpty(c5) && isEmpty(c6)) return SCREENING_NOT_DONE_SUPPORTING_FACT;
+        return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+    }
+
+    private String handleSupportingFactsC5EqualsOne(String[] params) {
+        String c5 = params[0];
+        return isNotEmpty(c5) ? SCREENING_NOT_DONE_SUPPORTING_FACT : "";
+    }
+
+    private String handleSupportingFactsForMedicationNotPrescribed(String[] params) {
+        String c5 = params[0];
+        return isNotEmpty(c5) ? "Medication not Prescribed" : "";
+    }
+
+    private String handleSupportingFactsForVitalNotTaken(String[] params) {
+        String c5 = params[0];
+        return isNotEmpty(c5) ? VITALS_NOT_TAKEN_SUPPORTING_FACT : "";
+    }
+
+    private String handleSupportingFactsForDepressionScreening(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        if (isNotEmpty(c5) && isEmpty(c6)) return "Screening not Done";
+        if (isEmpty(c5) && isNotEmpty(c6)) return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+        return "Screening not Done";
+    }
+
+    private String handleSupportingFactsForDepressionRemission(String[] params) {
+        String c5 = params[0];
+        return isNotEmpty(c5) ? "Remission Screening Not Done" : "";
+    }
+
+    private boolean isNotEmpty(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private boolean isEmpty(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+
+    public String getDate(int qid, String c3, String c5, String c6, String c7, String c9, String c17) {
+        if ("0".equals(c3)) {
+            return handleDateC3EqualsZeroForDate(qid, c5, c6, c7, c9);
+        } else if ("1".equals(c3) && qid == 225) {
+            return handleDateC3EqualsOneForDate(c17);
+        }
+        return "";
+    }
+
+    private String handleDateC3EqualsZeroForDate(int qid, String c5, String c6, String c7, String c9) {
+        Map<Integer, Function<String[], String>> qidHandlers = new HashMap<>();
+        qidHandlers.put(213, this::handleDateForChildhoodBMI);
+        qidHandlers.put(205, this::handleDateForAdultBMI);
+        qidHandlers.put(232, this::handleDateForTobaccoScreening);
+        qidHandlers.put(220, this::handleDateForDepressionScreening);
+
+        Function<String[], String> handler = qidHandlers.get(qid);
+        if (handler != null) {
+            return handler.apply(new String[]{c5, c6, c7, c9});
+        }
+        return "";
+    }
+
+    private String handleDateC3EqualsOneForDate(String c17) {
+        if (isNotEmpty(c17)) return c17;
+        return "No HbA1c Value";
+    }
+
+    private String handleDateForChildhoodBMI(String[] params) {
+        String c5 = params[0];
+        String  c6 = params[1];
+        String c7 = params[2];
+        if (isNotEmpty(c5) && isNotEmpty(c6) && isNotEmpty(c7)) return "Nutrition Counseling and Physical Activity Pending";
+        if (isEmpty(c5) && isNotEmpty(c6) && isNotEmpty(c7)) return PHYSICAL_ACTIVITY_PENDING_FOR_DATE;
+        if (isEmpty(c5) && isEmpty(c6) && isNotEmpty(c7)) return PHYSICAL_ACTIVITY_PENDING_FOR_DATE;
+        if (isEmpty(c5) && isNotEmpty(c6) && isEmpty(c7)) return "Nutrition Counseling Pending";
+        if (isNotEmpty(c5) && isEmpty(c6) && isEmpty(c7)) return "Nutrition Counseling and Physical Activity Done";
+        if (isNotEmpty(c5) && isEmpty(c6) && isNotEmpty(c7)) return PHYSICAL_ACTIVITY_PENDING_FOR_DATE;
+        if (isNotEmpty(c5) && isNotEmpty(c6) && isEmpty(c7)) return "Nutrition Counselling Pending";
+        return "";
+    }
+
+    private String handleDateForAdultBMI(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        String c9 = params[3];
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+        if (isNotEmpty(c5) && isEmpty(c6)) return FOLLOW_UP_COMPLETED_FOR_DATE;
+        if (isEmpty(c5) && isNotEmpty(c6)) {
+            switch (c9) {
+                case "0": return "Vitals Taken-Normal Weight";
+                case "1": return "Vitals Taken-Under Weight";
+                case "2": return "Vitals Taken-Over Weight";
+                default: return  "";
+            }
+        }
+        return "";
+    }
+
+    private String handleDateForTobaccoScreening(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+        if (isNotEmpty(c5) && isEmpty(c6)) return FOLLOW_UP_COMPLETED_FOR_DATE;
+        if (isEmpty(c5) && isNotEmpty(c6)) return "Screening Completed";
+        return "";
+    }
+
+    private String handleDateForDepressionScreening(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        String c9 = params[3];
+        if (isNotEmpty(c5) && isEmpty(c6)) return FOLLOW_UP_COMPLETED_FOR_DATE;
+        if (isEmpty(c5) && isNotEmpty(c6)) {
+            switch (c9) {
+                case "0": return "Screening Completed-Negative";
+                case "1": return "Screening Completed-Positive";
+                default: return "";
+            }
+        }
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+        return "";
+    }
+
+
+
+    public void getComplianceStatus(Measure measure, int qid, String c3) {
+        if (qid == 225) {
+            measure.setOutcome("1".equals(c3) ? "NOT_ACHIEVED" : "ACHIEVED");
+        } else {
+            measure.setOutcome("1".equals(c3) ? "ACHIEVED" : "NOT_ACHIEVED");
+        }
+    }
+
+    public String determineItemName(int qid, String c3, String description) {
+        if (qid == 225 && "1".equals(c3)) {
+            return "";
+        } else if (qid == 225 && "0".equals(c3)) {
+            return description;
+        }
+        return "1".equals(c3) ? "" : description;
+    }
+    }
 
 
 
@@ -92,6 +262,154 @@ WHERE ecd.qid  IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242)
 
 
 
+package analytics.rcp.uds.dao;
+
+import analytics.HedisDao;
+import analytics.rcp.model.Measure;
+import analytics.rcp.model.Program;
+import analytics.rcp.model.SupportingFact;
+import analytics.rcp.uds.exception.UdsCdeException;
+import analytics.rcp.uds.util.UdsCdeUtil;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static analytics.rcp.uds.constant.UdsCdeConstants.*;
+import static analytics.rcp.uds.constant.UdsCdeQueryConstants.*;
+
+public class UdsCdeDao extends HedisDao {
+
+    private final UdsCdeUtil udsCdeUtil;
+
+    public UdsCdeDao() {
+        this.udsCdeUtil = new UdsCdeUtil(); 
+    }
+
+    /**
+     * Generates a Program Object
+     *
+     * @return Returns a Program Object
+     */
+    public Program generateUDSProgram() {
+        Program program = null;
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            try (PreparedStatement pstmt = conn.prepareStatement(GET_UDS_PROGRAM_QUERY)) {
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        program = new Program();
+                        program.setName(rs.getString(COLUMN_NAME_PROGRAM));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new UdsCdeException(e.getMessage());
+        } finally {
+            close(conn);
+        }
+        return program;
+    }
+
+    /**
+     * Generates a integer active status value of ebo_cde_master_program table
+     *
+     * @return Returns integer active status value of ebo_cde_master_program table
+     */
+    public int getUdsActiveStatus() {
+        int active = -1;
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            try (PreparedStatement preparedStatement = conn.prepareStatement(GET_EBO_CDE_MASTER_ACTIVE_QUERY)) {
+                try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                    if (resultSet.next()) {
+                        active = resultSet.getInt(COLUMN_NAME_ACTIVE);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new UdsCdeException(e.getMessage());
+        } finally {
+            close(conn);
+        }
+        return active;
+    }
+
+    public Map<String, List<SupportingFact>> generateUDSMeasureSupportingFacts(int patientId) {
+        Map<String, List<SupportingFact>> supportingFactsMap = new HashMap<>();
+        Connection conn = null;
+        try {
+            conn = getConnection();
+        try (PreparedStatement preparedStatement = conn.prepareStatement(GET_UDS_SUPPORTING_FACTS_QUERY)) {
+            preparedStatement.setInt(1, patientId);
+            try (ResultSet rs = preparedStatement.executeQuery()) {
+                while (rs.next()) {
+                    List<SupportingFact> supportingFacts = new ArrayList<>();
+                    SupportingFact supportingFact = new SupportingFact();
+
+                    int qid = rs.getInt("qid");
+                    String c3 = rs.getString("C3");
+                    String c5 = rs.getString("C5");
+                    String c6 = rs.getString("C6");
+                    String c7 = rs.getString("C7");
+                    String c9 = rs.getString("C9");
+                    String c17 = rs.getString("C17");
+
+                    String measureName = udsCdeUtil.getMeasureName(qid);
+                    supportingFact.setName(udsCdeUtil.getSupportingFact(qid, c3, c5, c6, c7, c17));
+                    supportingFact.setDate(udsCdeUtil.getDate(qid, c3, c5, c6, c7, c9, c17));
+                    supportingFacts.add(supportingFact);
+
+                    supportingFactsMap.put(measureName, supportingFacts);
+                }
+            }
+        }
+        } catch (Exception e) {
+            throw new UdsCdeException(e.getMessage());
+        }
+        finally {
+            close(conn);
+        }
+        return supportingFactsMap;
+    }
+
+    public List<Measure> generateUDSMeasure(int patientId) {
+        List<Measure> measures = new ArrayList<>();
+        Connection conn = null;
+        try {
+            conn = getConnection();
+        try (PreparedStatement preparedStatement = conn.prepareStatement(GET_UDS_MEASURES_QUERY)) {
+            preparedStatement.setInt(1, patientId);
+            try (ResultSet rs = preparedStatement.executeQuery()) {
+                while (rs.next()) {
+                    Measure measure = new Measure();
+                    int qid = rs.getInt("qid");
+                    String c3 = rs.getString("c3");
+
+                    measure.setName(udsCdeUtil.getMeasureName(qid));
+                    measure.setFqn(String.valueOf(qid));
+                    udsCdeUtil.getComplianceStatus(measure, qid, c3);
+                    measure.setItemName(udsCdeUtil.determineItemName(qid, c3, rs.getString("description")));
+                    measure.setOrdersetEncId(rs.getString("encounter_id"));
+                    measures.add(measure);
+                }
+            }
+        }
+        } catch (Exception e) {
+            throw new UdsCdeException(e.getMessage());
+        }
+        finally {
+            close(conn);
+        }
+        return measures;
+    }
+}
 
 
 
@@ -106,110 +424,249 @@ WHERE ecd.qid  IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242)
 
 
 
-SELECT  
-            (CASE WHEN C3 = 1 AND ecd.qid = 213 THEN '' 
-            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Vitals Not Taken' 
-            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Nutrition Counseling Pending' 
-            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Nutrition Counseling Done' 
-            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 = '' OR C7 IS NULL) THEN 'Physical Activity Done' 
-            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) AND (C7 = '' OR C7 IS NULL) THEN 'Vitals Not Taken' 
-            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Vitals Not Taken' 
-            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 = '' OR C7 IS NULL) THEN 'Vitals Not Taken' 
-            WHEN C3 = 1 AND ecd.qid = 205 THEN '' 
-            WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Vitals Not Taken' 
-            WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) THEN 'Vitals Not Taken' 
-            WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
-            WHEN C3 = 1 AND ecd.qid = 232 THEN '' 
-            WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Screening Not Done' 
-            WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) THEN 'Screening Not Done' 
-            WHEN ecd.qid = 232 AND (C5 = '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
-            WHEN C3 = 1 AND ecd.qid = 201 THEN '' 
-            WHEN ecd.qid = 201 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' 
-            WHEN C3 = 1 AND ecd.qid = 235 THEN '' 
-            WHEN ecd.qid = 235 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' 
-            WHEN C3 = 1 AND ecd.qid = 208 THEN '' 
-            WHEN ecd.qid = 208 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' 
-            WHEN C3 = 1 AND ecd.qid = 230 THEN '' 
-            WHEN ecd.qid = 230 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Medication not Prescribed' 
-            WHEN C3 = 1 AND ecd.qid = 218 THEN '' 
-            WHEN ecd.qid = 218 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Medication not Prescribed' 
-            WHEN C3 = 1 AND ecd.qid = 203 THEN '' 
-            WHEN ecd.qid = 203 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' 
-            WHEN C3 = 1 AND ecd.qid = 228 THEN '' 
-            WHEN ecd.qid = 228 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Vital Not Taken' 
-            WHEN C3 = 1 AND ecd.qid = 220 THEN '' 
-            WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) THEN 'Screening not Done' 
-            WHEN ecd.qid = 220 AND (C5 = '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
-            WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Screening not Done' 
-            WHEN C3 = 1 AND ecd.qid = 223 THEN '' 
-            WHEN ecd.qid = 223 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Remission Screening Not Done' 
-            WHEN c3= 0 AND ecd.qid  = 225 THEN '' 
-            WHEN c3 = 1 AND ecd.qid = 225 AND c17 > 9 THEN 'HbA1c Value > 9' 
-            WHEN C3 = 1 AND ecd.qid = 225 AND (c17 = '' OR C17 IS NULL) THEN 'No HbA1c Ordered' 
-			WHEN C3 = 1 AND ecd.qid = 240 THEN ''
-			WHEN ecd.qid = 240 AND C3 = 0 and C27 = 0 THEN 'Treatment Inititation Pending'
-			WHEN ecd.qid = 240 AND C3 = 0 and C27 > 0 THEN 'Compliance Period Closed: No further action possible'
-			WHEN C3 = 1 AND ecd.qid = 242 THEN ''
-			WHEN ecd.qid = 242 AND C3 = 0 AND C27 = 0 AND C26 = 0 THEN 'Patient Engagement Required'
-			WHEN ecd.qid = 242 AND C3 = 0 AND C27 = 0 AND C26 = 1 THEN 'One More Engagement Required'
-			WHEN ecd.qid = 242 AND C3 = 0 AND C27 <> 0 THEN 'Compliance Period Closed: No further action possible'
-            END 
-            ) AS 'Supporting_Facts', 
-            (CASE WHEN C3 = 1 AND ecd.qid = 213 THEN '' 
-            WHEN ecd.qid = 213 AND (C5 <> ''OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Nutrition Counseling and Physical Activity Pending' 
-            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Physical Activity Pending' 
-            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Physical Activity Pending' 
-            WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 =  '' OR C7 IS NULL) THEN 'Nutrition Counseling Pending' 
-            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 =  '' OR C7 IS NULL) THEN 'Nutrition Counseling and Physical Activity Done' 
-            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Physical Activity Pending' 
-            WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 =  '' OR C7 IS NULL) THEN 'Nutrition Counselling Pending' 
-            WHEN C3 = 1 AND ecd.qid = 205 THEN '' 
-            WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
-            WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) THEN 'Follow Up Completed ' 
-            WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 =  0 THEN 'Vitals Taken-Normal Weight' 
-            WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 =  1 THEN 'Vitals Taken-Under Weight' 
-            WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 =  2 THEN 'Vitals Taken-Over Weight' 
-            WHEN C3 = 1 AND ecd.qid = 232 THEN '' 
-            WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' 
-            WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) THEN 'Follow Up Completed' 
-            WHEN ecd.qid = 232 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Screening Completed' 
-            WHEN c3= 0 AND ecd.qid  = 225 THEN '' 
-            WHEN c3 = 1 AND ecd.qid = 225 AND (C17 <> '' OR C17 IS NOT NULL) THEN C17 
-            WHEN C3 = 1 AND ecd.qid = 225 AND (C17 = '' OR C17 IS NULL) THEN 'No HbA1c Value' 
-            WHEN ecd.qid = 220 AND C3 =  1  AND C9 = 0 THEN '' 
-            WHEN ecd.qid = 220 AND C3 =  1  AND C9 = 1 THEN '' 
-            WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) THEN 'Follow Up Completed' 
-            WHEN ecd.qid = 220 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 = 0 THEN 'Screening Completed-Negative' 
-            WHEN ecd.qid = 220 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 = 1 THEN 'Screening Completed-Positive' 
-            WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' AND C6 IS NOT NULL) THEN 'Follow Up Not Done' 
-            END 
-            ) AS 'Date',  
-            (CASE  
-            WHEN ecd.qid  = 201 THEN 'Cervical Cancer Screening' 
-            WHEN ecd.qid  = 203 THEN 'HIV Screening' 
-            WHEN ecd.qid  = 205 THEN 'Adult BMI' 
-            WHEN ecd.qid  = 208 THEN 'Colorectal Cancer Screening' 
-            WHEN ecd.qid  = 213 THEN 'Childhood BMI' 
-            WHEN ecd.qid  = 218 THEN 'IVD' 
-            WHEN ecd.qid  = 220 THEN 'Depression Screening' 
-            WHEN ecd.qid  = 223 THEN 'Depression Remission' 
-            WHEN ecd.qid  = 225 THEN 'Diabetes' 
-            WHEN ecd.qid  = 228 THEN 'Hypertension' 
-            WHEN ecd.qid  = 230 THEN 'Statin Therapy' 
-            WHEN ecd.qid  = 232 THEN 'Tobacco Screening' 
-            WHEN ecd.qid  = 235 THEN 'Breast Cancer Screening' 
-			WHEN ecd.qid  = 240 THEN 'SUD Initiation' 
-			WHEN ecd.qid  = 242 THEN 'SUD Engagement' 
-            END) AS 'Measure_Name', 
-            p.pid AS 'Patient_id' 
-            FROM ebo_cde_detail ecd 
-            INNER JOIN patients p ON p.pid = ecd.c2 
-			INNER JOIN (
-			SELECT C2,qid, MAX(ID) AS max_id
-			FROM ebo_cde_detail
-			WHERE qid  IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND cdeid = 2
-			GROUP BY C2,qid
-			) latest ON latest.C2 = ecd.C2 AND Latest.max_id = ecd.id 
-            WHERE ecd.qid IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) 
-			
-			
+
+
+
+package analytics.rcp.uds.service;
+
+import CwMobile.CwUtils;
+import analytics.HedisRightChartPanel;
+import analytics.rcp.uds.dao.UdsCdeDao;
+import analytics.rcp.model.MainBody;
+import analytics.rcp.model.Measure;
+import analytics.rcp.model.Program;
+import analytics.rcp.model.SupportingFact;
+import analytics.rcp.uds.exception.UdsCdeException;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.LocalDate;
+import java.time.Year;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static analytics.rcp.uds.constant.UdsCdeConstants.*;
+import static emr.healowplus.todolist.core.util.TodoContext.isTodoEnabled;
+
+public class UdsCdeService {
+
+    private final UdsCdeDao udsCdeDao;
+    private final HedisRightChartPanel hedisRightChartPanel;
+    private static final Logger LOGGER = LoggerFactory.getLogger(UdsCdeService.class);
+
+
+    public UdsCdeService() {
+        this.udsCdeDao = new UdsCdeDao();
+        this.hedisRightChartPanel = new HedisRightChartPanel();
+    }
+
+    /**
+     * Generates Uds data based on patientId and isGapsOnly
+     *
+     * @param patientId The patient id and isGapsOnly to get data for
+     * @return Returns a mainbody object
+     */
+    public String generateUds(boolean isGapsOnly, int patientId) {
+        MainBody mainBody = null;
+        String resp = null;
+        if (ENABLE_POPHEALTH_HEDIS_ITEMKEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, POPHEALTH_HEDIS_ITEMKEY))) {
+            resp = hedisRightChartPanel.generate(isGapsOnly, patientId);
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            mainBody = gson.fromJson(resp, MainBody.class);
+        } else {
+            mainBody = new MainBody();
+        }
+        try {
+            if (isTodoEnabled()) {
+                Optional<Program> udsProgram = Optional.ofNullable(setUdsPrograms(patientId));
+                Optional<List<Program>> mainPrograms = Optional.ofNullable(mainBody.getPrograms());
+                if (checkUDS() && mainPrograms.isPresent() && udsProgram.isPresent()) {
+                    if (isGapsOnly) {
+                        udsProgram.get().setMeasures(udsProgram.get().getMeasures().stream().filter(measure -> measure.getOutcome().equals(UDS_GAPS)).collect(Collectors.toList()));
+                        mainPrograms.get().add(udsProgram.get());
+                        mainBody.setPrograms(mainPrograms.get());
+                    } else {
+                        mainPrograms.get().add(udsProgram.get());
+                        mainBody.setPrograms(mainPrograms.get());
+                    }
+                }
+                udsMeasurePeriods(mainBody);
+            }
+        } catch (UdsCdeException e) {
+            LOGGER.error("Exception while getting UDS data", e.getMessage());
+        }
+        return new GsonBuilder().excludeFieldsWithoutExposeAnnotation().serializeNulls().create().toJson(mainBody);
+    }
+
+    /**
+     * Set Uds data for a given patientId
+     *
+     * @param patientId The patient id to get data for
+     * @return Returns object of udsProgram
+     */
+    private Program setUdsPrograms(int patientId) {
+        Program udsProgram = udsCdeDao.generateUDSProgram();
+        List<Measure> udsCollection = udsCdeDao.generateUDSMeasure(patientId).stream().map(measure -> {
+            String itemName = measure.getItemName();
+            if (itemName != null && !itemName.isEmpty()) {
+                measure.setOSSelectionType(COLUMN_NAME_ORDERSET);
+            }
+            return measure;
+        }).collect(Collectors.toList());
+        Optional<List<Measure>> udsMeasures = Optional.of(udsCollection);
+        Optional<Map<String, List<SupportingFact>>> udsMeasureSupportingFacts = Optional.ofNullable(udsCdeDao.generateUDSMeasureSupportingFacts(patientId));
+        if (udsMeasures.isPresent() && udsMeasureSupportingFacts.isPresent()) {
+            for (Measure measure : udsMeasures.get()) {
+                Optional<List<SupportingFact>> measureSupportingFacts = Optional.ofNullable(udsMeasureSupportingFacts.get().get(measure.getName()));
+                if (measureSupportingFacts.isPresent()) {
+                    measure.setSupportingFacts(measureSupportingFacts.get());
+                }
+            }
+            if (udsProgram != null) {
+                udsProgram.setMeasures(udsMeasures.get());
+            }
+        }
+        return udsProgram;
+    }
+
+    /**
+     * Checks for ebo_cde_job itemkey value and ebo_cde_master_program active status
+     *
+     * @return Returns ebo_cde_job itemkey value and ebo_cde_master_program active status
+     */
+    private boolean checkUDS() {
+        int active = udsCdeDao.getUdsActiveStatus();
+        return active == EBO_CDE_MASTER_PROGRAM_ACTIVE_VALUE && ENABLE_EBO_CDE_JOB_ITEMKEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, ITEM_KEY_EBO_CDE_JOB_ACTIVATION));
+    }
+
+    /**
+     * Set date & time format for udsMeasurePeriodStartDate and udsMeasurePeriodEndDate fields
+     */
+    private void udsMeasurePeriods(MainBody mainBody) {
+        mainBody.setUdsMeasurePeriodStartDate(LocalDate.of(Year.now().getValue(), 1, 1).format(DateTimeFormatter.ofPattern(DATE_TIME_FORMAT)));
+        mainBody.setUdsMeasurePeriodEndDate(LocalDate.of(Year.now().getValue(), 12, 31).format(DateTimeFormatter.ofPattern(DATE_TIME_FORMAT)));
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package analytics.rcp.uds.constant;
+
+public class UdsCdeConstants {
+
+    private UdsCdeConstants() {
+    }
+
+    public static final String COLUMN_NAME_MEASURE = "Measure_Name";
+    public static final String COLUMN_NAME_SUPPORTING_FACTS = "Supporting_Facts";
+    public static final String COLUMN_NAME_DATE = "Date";
+
+    public static final String COLUMN_NAME_QID = "qid";
+    public static final String COLUMN_NAME_COMPLIANCE_STATUS = "Compliance Status";
+    public static final String COLUMN_NAME_ITEMNAME = "ItemName";
+    public static final String COLUMN_NAME_ORDERSETID = "OrdersetID";
+    public static final String COLUMN_NAME_ORDERSET = "orderset";
+
+    public static final String COLUMN_NAME_PROGRAM = "Program_Name";
+
+    public static final String COLUMN_NAME_ACTIVE = "active";
+
+    public static final String ENABLE_POPHEALTH_HEDIS_ITEMKEY = "yes";
+    public static final String POPHEALTH_HEDIS_ITEMKEY = "pophealth_hedis";
+    public static final String DISABLE_POPHEALTH_HEDIS_ITEMKEY = "no";
+    public static final String UDS_GAPS = "NOT_ACHIEVED";
+    public static final int EBO_CDE_MASTER_PROGRAM_ACTIVE_VALUE = 1;
+    public static final String ITEM_KEY_EBO_CDE_JOB_ACTIVATION = "EboCdeJobActivation";
+    public static final String DATE_TIME_FORMAT = "MM/dd/yyyy";
+    public static final String ENABLE_EBO_CDE_JOB_ITEMKEY = "yes";
+    public static final String VITALS_NOT_TAKEN_SUPPORTING_FACT = "Vitals Not Taken";
+    public static final String SCREENING_NOT_DONE_SUPPORTING_FACT = "Screening Not Done";
+    public static final String PHYSICAL_ACTIVITY_PENDING_FOR_DATE = "Physical Activity Pending";
+    public static final String FOLLOW_UP_COMPLETED_FOR_DATE = "Follow Up Completed";
+    public static final String FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS = "Follow Up Not Done";
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package analytics.rcp.uds.constant;
+
+public class UdsCdeQueryConstants {
+
+    private UdsCdeQueryConstants() {
+    }
+
+    public static final String GET_UDS_PROGRAM_QUERY = "select distinct cdename as 'Program_Name' from eBO_CDE_DETAIL where cdename = 'UDS'";
+    public static final String GET_EBO_CDE_MASTER_ACTIVE_QUERY = "SELECT active FROM eBO_CDE_master_program where cdeid = 2";
+
+    public static final String GET_UDS_SUPPORTING_FACTS_QUERY = "SELECT  DISTINCT p.pid AS 'Patient_id', ecd.qid,ecd.C3,ecd.C5,ecd.C6,ecd.C7,ecd.C9,ecd.C17\n" +
+            " FROM ebo_cde_detail ecd\n" +
+            " INNER JOIN patients p ON p.pid = ecd.c2\n" +
+            " WHERE ecd.qid IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235 ) AND C2 = ?";
+
+    public static final String GET_UDS_MEASURES_QUERY = "    SELECT ecd.qid, \n" +
+            "    p.pid AS 'Patient_id', \n" +
+            "    ecd.c3, ORDERSET.ENCOUNTERID AS encounter_id, \n" +
+            "    ORDERSET.DESCRIPTION AS DESCRIPTION  \n" +
+            "    FROM ebo_cde_detail ecd   INNER JOIN patients p ON p.pid = ecd.c2 \n" +
+            "    LEFT JOIN (  SELECT ORDERSETS.ENCOUNTERID, ORDERSETS.DESCRIPTION,  \n" +
+            "    CASE  WHEN ORDERSETS.Description = 'UDS_Cervical_Cancer_Screening' THEN 201  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Breast_Cancer_Screening' THEN 235 \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Childhood_BMI' THEN 213  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Adult_BMI' THEN 205  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Tobacco_Cessation' THEN 232  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Statin_Therapy' THEN 230  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_IVD' THEN 218  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Colorectal_Cancer_Screening' THEN 208  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_HIV_Screening' THEN 203  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Depression_Screening' THEN 220  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Depression_Remission' THEN 223  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Hypertension' THEN 228  \n" +
+            "    WHEN ORDERSETS.Description = 'UDS_Diabetes' THEN 225   END AS 'QID' FROM ORDERSETS   \n" +
+            "    INNER JOIN ( SELECT MAX(ENCOUNTERID) ENCOUNTERID, DESCRIPTION  \n" +
+            "    FROM ORDERSETS   WHERE ORDERSETS.DELETEFLAG = 0  GROUP BY DESCRIPTION ) MAXOS ON MAXOS.ENCOUNTERID = ORDERSETS.ENCOUNTERID) ORDERSET ON ORDERSET.QID = ecd.qid AND ecd.cdeid=2   \n" +
+            "    WHERE ecd.qid IN (201, 203, 205, 208, 213, 218, 220, 223, 225, 228, 230, 232, 235) AND ecd.cdeid = 2 AND C2 = ?";
+}
