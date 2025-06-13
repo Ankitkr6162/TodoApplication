@@ -1,363 +1,196 @@
-    public static final String INDEX_NAME_IX_CODE_SYSTEM_VALUE = "ix_code_code_system_value_set_name_itemid";
-    public static final String INDEX_NAME_IX_CODE = "ix_code";
-    public static final String INDEX_NAME_IX_CODE_SYSTEM = "ix_code_system";
-    public static final String INDEX_NAME_IX_VALUE_SET_NAME = "ix_value_set_name";
-    public static final String INDEX_NAME_IX_ITEMID = "ix_itemid";
-    public static final String UDSFLATTABLEYEAR_ITEMKEY = "udsflattablejobyear";
-    public static final String COLUMN_DL_CUBE_INDEX_COUNT = "dl_cube_index_count";
-    public static final String NO_ACTIVE_YEAR_FOR_UDSFLATTABLEJOB_ITEMKEY = "No active year found for udsflattablejobyear itemkey";
-    public static final String[] DL_CUBE_CMS_DATA_INDEXES = {"ix_code_code_system_value_set_name_itemid", "ix_code", "ix_code_system", "ix_value_set_name", "ix_itemid"};
+SELECT 
+	ecd.qid, 
+	CASE 
+		WHEN ecd.qid = 201 THEN 'Cervical Cancer Screening' 
+		WHEN ecd.qid = 203 THEN 'HIV Screening' 
+		WHEN ecd.qid = 205 THEN 'Adult BMI' 
+		WHEN ecd.qid = 208 THEN 'Colorectal Cancer Screening' 
+		WHEN ecd.qid = 213 THEN 'Childhood BMI' 
+		WHEN ecd.qid = 218 THEN 'IVD' 
+		WHEN ecd.qid = 220 THEN 'Depression Screening' 
+		WHEN ecd.qid = 223 THEN 'Depression Remission' 
+		WHEN ecd.qid = 225 THEN 'Diabetes' 
+		WHEN ecd.qid = 228 THEN 'Hypertension' 
+		WHEN ecd.qid = 230 THEN 'Statin Therapy' 
+		WHEN ecd.qid = 232 THEN 'Tobacco Screening' 
+		WHEN ecd.qid = 235 THEN 'Breast Cancer Screening' 
+		WHEN ecd.qid = 240 THEN 'SUD Initiation' 
+		WHEN ecd.qid = 242 THEN 'SUD Engagement' 
+		END AS 'Measure Name', 
+	p.pid AS 'Patient ID', 
+	CASE 
+		WHEN ecd.qid = 225 AND ecd.c3 = 0 THEN 'ACHIEVED' 
+		WHEN ecd.qid = 225 AND ecd.c3 = 1 THEN 'NOT ACHIEVED' 
+		WHEN ecd.qid <> 225 AND ecd.c3 = 0 THEN 'NOT ACHIEVED' 
+		WHEN ecd.qid <> 225 AND ecd.c3 = 1 THEN 'ACHIEVED' 
+		END AS 'Compliance Status', 
+	CASE 
+		WHEN ecd.qid = 225 AND ecd.c3 = 1 THEN os.EncounterID 
+		WHEN ecd.qid = 225 AND ecd.c3 = 0 THEN 0 ELSE os.EncounterID 
+		END AS 'Orderset ID', 
+	CASE 
+		WHEN ecd.qid = 225 AND ecd.c3 = 1 THEN os.Description 
+		WHEN ecd.qid = 225 AND ecd.c3 = 0 THEN '' ELSE os.Description 
+		END AS 'Item Name' 
+FROM ebo_cde_detail ecd 
+INNER JOIN patients p ON p.pid = ecd.c2 
+INNER JOIN (
+		SELECT c2, qid, MAX(id) AS max_id FROM ebo_cde_detail 
+		WHERE qid IN (201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND cdeid = 2 
+		GROUP BY c2, qid
+		) latest ON latest.c2 = ecd.c2 AND latest.qid = ecd.qid AND latest.max_id = ecd.id 
+LEFT JOIN (
+		SELECT os.EncounterID, os.Description, CASE 
+							WHEN os.Description = 'UDS Cervical Cancer Screening' THEN 201 
+							WHEN os.Description = 'UDS_Breast_Cancer_Screening' THEN 235 
+							WHEN os.Description = 'UDS Childhood BMI' THEN 213 
+							WHEN os.Description = 'UDS Adult BMI' THEN 205 
+							WHEN os.Description = 'UDS Tobacco Cessation' THEN 232 
+							WHEN os.Description = 'UDS Statin_ Therapy' THEN 230 
+							WHEN os.Description = 'UDS IVD' THEN 218 
+							WHEN os.Description = 'UDS Colorectal Cancer Screening' THEN 208 
+							WHEN os.Description = 'UDS HIV Screening' THEN 203 
+							WHEN os.Description = 'UDS Depression Screening' THEN 220 
+							WHEN os.Description = 'UDS Depression Remission' THEN 223 
+							WHEN os.Description = 'UDS Hypertension' THEN 228 
+							WHEN os.Description = 'UDS Diabetes' THEN 225 
+							WHEN os.Description = 'UDS SUD Initiation' THEN 240 
+							WHEN os.Description = 'UDS SUD Engagement' THEN 242 
+							END AS qid 
+		FROM ORDERSETS os 
+		INNER JOIN (
+				SELECT MAX(EncounterID) AS EncounterID, Description 
+				FROM ORDERSETS 
+				WHERE DELETEFLAG = 0 
+				GROUP BY Description) maxos ON maxos.EncounterID = os.EncounterID
+				) os ON os.qid = ecd.qid 
+WHERE ecd.qid IN (201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND ecd.cdeid = 2 AND ((ecd.qid = 225 AND ecd.c3 = 1) OR (ecd.qid <> 225 AND ecd.c3 = 0));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    public static final String GET_UDS_SUPPORTING_FACTS_QUERY = "SELECT  \n" +
+            "(CASE WHEN C3 = 1 AND ecd.qid = 213 THEN '' \n" +
+            "WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Vitals Not Taken' \n" +
+            "WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Nutrition Counseling Pending' \n" +
+            "WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Nutrition Counseling Done' \n" +
+            "WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 = '' OR C7 IS NULL) THEN 'Physical Activity Done' \n" +
+            "WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) AND (C7 = '' OR C7 IS NULL) THEN 'Vitals Not Taken' \n" +
+            "WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Vitals Not Taken' \n" +
+            "WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 = '' OR C7 IS NULL) THEN 'Vitals Not Taken' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 205 THEN '' \n" +
+            "WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Vitals Not Taken' \n" +
+            "WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) THEN 'Vitals Not Taken' \n" +
+            "WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 232 THEN '' \n" +
+            "WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Screening Not Done' \n" +
+            "WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) THEN 'Screening Not Done' \n" +
+            "WHEN ecd.qid = 232 AND (C5 = '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 201 THEN '' \n" +
+            "WHEN ecd.qid = 201 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 235 THEN '' \n" +
+            "WHEN ecd.qid = 235 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 208 THEN '' \n" +
+            "WHEN ecd.qid = 208 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 230 THEN '' \n" +
+            "WHEN ecd.qid = 230 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Medication Not Prescribed' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 218 THEN '' \n" +
+            "WHEN ecd.qid = 218 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Medication Not Prescribed' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 203 THEN '' \n" +
+            "WHEN ecd.qid = 203 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Screening Not Done' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 228 THEN '' \n" +
+            "WHEN ecd.qid = 228 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Vital Not Taken' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 220 THEN '' \n" +
+            "WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 = '' OR C6 IS NULL) THEN 'Screening Not Done' \n" +
+            "WHEN ecd.qid = 220 AND (C5 = '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' \n" +
+            "WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Screening Not Done' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 223 THEN '' \n" +
+            "WHEN ecd.qid = 223 AND (C5 <> '' OR C5 IS NOT NULL) THEN 'Remission Screening Not Done' \n" +
+            "WHEN c3= 0 AND ecd.qid  = 225 THEN '' \n" +
+            "WHEN c3 = 1 AND ecd.qid = 225 AND c17 > 9 THEN 'HbA1c Value > 9' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 225 AND (c17 = '' OR C17 IS NULL) THEN 'No HbA1c Ordered' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 240 THEN ''\n" +
+            "WHEN ecd.qid = 240 AND C3 = 0 and C27 = 0 THEN 'Treatment Initiation Pending'\n" +
+            "WHEN ecd.qid = 240 AND C3 = 0 and C27 > 0 THEN 'Compliance Period Closed: No Further Action Possible'\n" +
+            "WHEN C3 = 1 AND ecd.qid = 242 THEN ''\n" +
+            "WHEN ecd.qid = 242 AND C3 = 0 AND C27 = 0 AND C26 = 0 THEN 'Patient Engagement Required'\n" +
+            "WHEN ecd.qid = 242 AND C3 = 0 AND C27 = 0 AND C26 = 1 THEN 'One More Engagement Required'\n" +
+            "WHEN ecd.qid = 242 AND C3 = 0 AND C27 <> 0 THEN 'Compliance Period Closed: No Further Action Possible'\n" +
+            "END \n" +
+            ") AS 'Supporting_Facts', \n" +
+            "(CASE WHEN C3 = 1 AND ecd.qid = 213 THEN '' \n" +
+            "WHEN ecd.qid = 213 AND (C5 <> ''OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Nutrition Counseling and Physical Activity Pending' \n" +
+            "WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Physical Activity Pending' \n" +
+            "WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Physical Activity Pending' \n" +
+            "WHEN ecd.qid = 213 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 =  '' OR C7 IS NULL) THEN 'Nutrition Counseling Pending' \n" +
+            "WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 =  '' OR C7 IS NULL) THEN 'Nutrition Counseling and Physical Activity Done' \n" +
+            "WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) AND (C7 <> '' OR C7 IS NOT NULL) THEN 'Physical Activity Pending' \n" +
+            "WHEN ecd.qid = 213 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND (C7 =  '' OR C7 IS NULL) THEN 'Nutrition Counselling Pending' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 205 THEN '' \n" +
+            "WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' \n" +
+            "WHEN ecd.qid = 205 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) THEN 'Follow Up Completed ' \n" +
+            "WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 =  0 THEN 'Vitals Taken-Normal Weight' \n" +
+            "WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 =  1 THEN 'Vitals Taken-Under Weight' \n" +
+            "WHEN ecd.qid = 205 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 =  2 THEN 'Vitals Taken-Over Weight' \n" +
+            "WHEN C3 = 1 AND ecd.qid = 232 THEN '' \n" +
+            "WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Follow Up Not Done' \n" +
+            "WHEN ecd.qid = 232 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) THEN 'Follow Up Completed' \n" +
+            "WHEN ecd.qid = 232 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) THEN 'Screening Completed' \n" +
+            "WHEN c3= 0 AND ecd.qid  = 225 THEN '' \n" +
+            "WHEN c3 = 1 AND ecd.qid = 225 AND (C17 <> '' OR C17 IS NOT NULL) THEN C17 \n" +
+            "WHEN C3 = 1 AND ecd.qid = 225 AND (C17 = '' OR C17 IS NULL) THEN 'No HbA1c Value' \n" +
+            "WHEN ecd.qid = 220 AND C3 =  1  AND C9 = 0 THEN '' \n" +
+            "WHEN ecd.qid = 220 AND C3 =  1  AND C9 = 1 THEN '' \n" +
+            "WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 =  '' OR C6 IS NULL) THEN 'Follow Up Completed' \n" +
+            "WHEN ecd.qid = 220 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 = 0 THEN 'Screening Completed-Negative' \n" +
+            "WHEN ecd.qid = 220 AND (C5 =  '' OR C5 IS NULL) AND (C6 <> '' OR C6 IS NOT NULL) AND C9 = 1 THEN 'Screening Completed-Positive' \n" +
+            "WHEN ecd.qid = 220 AND (C5 <> '' OR C5 IS NOT NULL) AND (C6 <> '' AND C6 IS NOT NULL) THEN 'Follow Up Not Done' \n" +
+            "END \n" +
+            ") AS 'Date',  \n" +
+            "(CASE  \n" +
+            "WHEN ecd.qid  = 201 THEN 'Cervical Cancer Screening' \n" +
+            "WHEN ecd.qid  = 203 THEN 'HIV Screening' \n" +
+            "WHEN ecd.qid  = 205 THEN 'Adult BMI' \n" +
+            "WHEN ecd.qid  = 208 THEN 'Colorectal Cancer Screening' \n" +
+            "WHEN ecd.qid  = 213 THEN 'Childhood BMI' \n" +
+            "WHEN ecd.qid  = 218 THEN 'IVD' \n" +
+            "WHEN ecd.qid  = 220 THEN 'Depression Screening' \n" +
+            "WHEN ecd.qid  = 223 THEN 'Depression Remission' \n" +
+            "WHEN ecd.qid  = 225 THEN 'Diabetes' \n" +
+            "WHEN ecd.qid  = 228 THEN 'Hypertension' \n" +
+            "WHEN ecd.qid  = 230 THEN 'Statin Therapy' \n" +
+            "WHEN ecd.qid  = 232 THEN 'Tobacco Screening' \n" +
+            "WHEN ecd.qid  = 235 THEN 'Breast Cancer Screening' \n" +
+            "WHEN ecd.qid  = 240 THEN 'SUD Initiation' \n" +
+            "WHEN ecd.qid  = 242 THEN 'SUD Engagement' \n" +
+            "END) AS 'Measure_Name', \n" +
+            "p.pid AS 'Patient_id' \n" +
+            "FROM ebo_cde_detail ecd \n" +
+            "INNER JOIN patients p ON p.pid = ecd.c2 \n" +
+            "INNER JOIN (\n" +
+            "SELECT C2,qid, MAX(ID) AS max_id\n" +
+            "FROM ebo_cde_detail\n" +
+            "WHERE qid  IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND cdeid = 2\n" +
+            "GROUP BY C2,qid\n" +
+            ") latest ON latest.C2 = ecd.C2 AND Latest.max_id = ecd.id \n" +
+            "WHERE ecd.qid IN ( 201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND ecd.C2 = ?";
 
 
 
-    private void ensureDlCubeCmsDataIndexesExist() {
-        String[] indexes = ExcelConstants.DL_CUBE_CMS_DATA_INDEXES;
-        for (String index : indexes) {
-            if (!excelToTableDao.isIndexPresentOnDlCubeCmsData(index)) {
-                LOGGER.info("Index missing: " + index + ". Creating index...");
-                excelToTableDao.createIndexOnDlCubeCmsData(index);
-            }
-        }
-    }
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-package webemr.analytics.cmsdata.dao
-
-import catalog.Root
-import helpers.DbUtil
-import mockit.Mock
-import mockit.MockUp
-import spock.lang.Shared
-import spock.lang.Unroll
-import util.ECWSpec
-import webemr.analytics.cmsdata.exception.InvalidExcelException
-import webemr.analytics.cmsdata.model.CMS
-import webemr.analytics.cmsdata.model.CMSData
-import java.sql.Connection
-import java.sql.PreparedStatement
-import java.sql.SQLException
-
-class ExcelToTableDaoSpec extends ECWSpec {
-    def excelToTableDao = new ExcelToTableDao()
-
-    @Shared
-    Map<String, List<CMSData>> cmsDataMap = null;
-    @Shared
-    ArrayList list = new ArrayList();
-    @Shared
-    String intialCMSItemkeyValue;
-
-
-    MockUp<Root> mockToThrowException
-
-    static def content = {
-        items(itemID: 90899901, itemName: 'Test_Item2', parentID: 237301, vmid: getVMId(), drugNameId: 3, keyName: 'CPTCodes', deleteflag: 0)
-        items(itemID: 90899902, itemName: 'Test_Item3', parentID: 237301, vmid: getVMId(), drugNameId: 3, keyName: 'CPTCodes', deleteflag: 0)
-        itemdetail(itemID: 90899901, propId: 13, value: 'D80.4')
-        labloinccodes(itemid: 90899902, CODE: '59576-9')
-        dl_cube_cms_data(id: 544343, CATEGORY_ID: 1, CMS_ID: "CMS117v9", QDM_Category: "Condition/Diagnosis/Problem", CODE: "D80.4", DESCRIPTION: "Test Data", CODE_SYSTEM: "ICD10CM", VALUE_SET_NAME: "Disorders of the Immune System", itemId: 656, updatedate: "2020-10-26 17:17:08");
-        dl_cube_cms_data(id: 544344, CATEGORY_ID: 2, CMS_ID: "CMS117v9", QDM_Category: "Condition/Diagnosis/Problem", CODE: "59576-9", DESCRIPTION: "Test Data", CODE_SYSTEM: "LOINC", VALUE_SET_NAME: "Body mass index (BMI) [Percentile]", itemId: 656, updatedate: "2020-10-26 17:17:08");
-    }
-
-    def setupSpec() {
-        db = DbUtil.getSqlInstance()
-
-        def con = db.getConnection()
-        def pstmt = con.prepareStatement("SELECT value from itemkeys WHERE name = ?")
-        pstmt.setString(1, 'udsflattablejobyear')
-        def rs = pstmt.executeQuery()
-        if (rs.next()) {
-            intialCMSItemkeyValue = rs.getString(1)
-        }
-        rs.close()
-        pstmt.close()
-    }
-
-    def setup() {
-        db = DbUtil.getSqlInstance()
-
-        def con = db.getConnection()
-        def pstmt = con.prepareStatement("UPDATE itemkeys SET VALUE = ? WHERE NAME = ?")
-        pstmt.setString(1, '2024')
-        pstmt.setString(2, 'udsflattablejobyear')
-        pstmt.executeUpdate()
-        pstmt.close()
-    }
-
-    def 'API to get CMS List'() {
-        when: "excelToTableDao.getCMSList is called"
-        List<CMS> list = excelToTableDao.getCMSList()
-
-        then: "It should return List<CMS> data"
-        list.size() >= 0;
-
-    }
-
-    def 'API to get CMS List - Exception'() {
-        given:
-        mockRootToThrowException()
-
-        when: "excelToTableDao.getCMSList is called"
-        List<CMS> list = excelToTableDao.getCMSList()
-
-        then: "It should throw exception"
-        list.size() == 0
-
-        cleanup:
-        mockToThrowException.tearDown()
-
-    }
-
-    def 'API to insert In Batch CMSData'() {
-        given: "Map<String, List<CMSData>> data,List data"
-        db.executeInsert("insert into DJ_CTL_CMS (CATEGORY_ID,CMS_NAME) values (333, 'CMS117v9-Test - 6B Section C')")
-        List<CMS> cmsList = excelToTableDao.getCMSList();
-
-        when: "excelToTableDao.insertInBatchCMSData is called"
-        Boolean isInsert = excelToTableDao.insertInBatchCMSData(cmsDataMap, cmsList);
-
-        then: "It should return List<CMS> data"
-        isInsert == result
-
-        cleanup:
-        clearData()
-
-        where:
-        cmsDataMap                                                        | result
-        getMapOfCmsData("CMS117v9-Test - 6B Section C", list, "CMS117v9") | true
-
-    }
-
-    def 'API to insert In Batch CMSData throw  - Exception'() {
-        given: "Map<String, List<CMSData>> data,List data"
-        Map<String, List<CMSData>> cmsDataMap = null
-        List<CMS> cmsList = null
-
-        when: "excelToTableDao.insertInBatchCMSData is called"
-        excelToTableDao.insertInBatchCMSData(cmsDataMap, cmsList)
-
-        then: "It should throw exception"
-        thrown(InvalidExcelException)
-
-    }
-
-    def 'API to insert In Batch CMSData  - Exception'() {
-        given: "Map<String, List<CMSData>> data,List data"
-        Map<String, List<CMSData>> cmsDataMap = null;
-        List<CMS> cmsList = null
-        mockRootToThrowException()
-
-        when: "excelToTableDao.insertInBatchCMSData is called"
-        excelToTableDao.insertInBatchCMSData(cmsDataMap, cmsList)
-
-        then: "It should throw exception"
-        thrown(InvalidExcelException)
-
-        cleanup:
-        mockToThrowException.tearDown()
-
-    }
-
-    @Unroll
-    def 'API to get Item Ids For Code'() {
-        given: "CMSDATA object"
-
-        when: "excelToTableDao.getItemIdsForCode is called"
-        List<Integer> list = excelToTableDao.getItemIdsForCode(cmsdata);
-
-        then: "It should return List<Integer> data "
-        list.size() >= 0
-
-        where:
-        cmsdata                                           | result
-        new CMSData(codeSystem: "ICD10CM", code: "D80.4") | _
-        new CMSData(codeSystem: "LOINC", code: "59576-9") | _
-    }
-
-    def 'API to get Item Ids For Code - Exception'() {
-        given: "CMSDATA object"
-        mockRootToThrowException()
-
-        when: "excelToTableDao.getItemIdsForCode is called"
-        List<Integer> list = excelToTableDao.getItemIdsForCode(cmsdata);
-
-        then: "It should throw exception"
-        list.size() == 0
-
-        cleanup:
-        mockToThrowException.tearDown()
-
-        where:
-        cmsdata                                           | result
-        new CMSData(codeSystem: "ICD10CM", code: "D80.4") | _
-    }
-
-    def 'API to insert Categories Data'() {
-        given: "CMSDATA object"
-
-        when: "excelToTableDao.insertCategoriesData is called"
-        excelToTableDao.insertCategoriesData(cmsdata2);
-
-        then: "It should not return any data "
-
-        cleanup:
-        db.execute("DELETE FROM DJ_CTL_CMS WHERE CMS_NAME IN ('CMS117v8-Test','CMS117v9-Test - 6B Section C')");
-
-        where:
-        cmsdata2                                                          | result
-        getMapOfCmsData("CMS117v8-Test", list, "CMS117v8")                | _
-        getMapOfCmsData("CMS117v9-Test - 6B Section C", list, "CMS117v9") | _
-    }
-
-    def 'API to insert Categories Data - Exception'() {
-        given: "CMSDATA object"
-        mockRootToThrowException()
-
-        when: "excelToTableDao.insertCategoriesData is called"
-        excelToTableDao.insertCategoriesData(cmsdata3);
-
-        then: "It should throw exception"
-
-        cleanup:
-        mockToThrowException.tearDown()
-
-        where:
-        cmsdata3                                                          | result
-        getMapOfCmsData("CMS117v9-Test - 6B Section C", list, "CMS117v9") | _
-    }
-
-    def 'API to add CMS Data Batch - Exception'() {
-        given: "CMSDATA object,CMS object,prepareStatement object"
-        def mockRoot = new Root()
-        Connection mockConnection = Mock(Connection.class);
-        PreparedStatement mockPreparedStatement = Mock(PreparedStatement.class)
-        mockRoot.con = mockConnection
-        mockRoot.con.prepareStatement(*_) >> mockPreparedStatement
-        mockPreparedStatement.addBatch() >> { throw new SQLException(); }
-        CMSData cmsdata = new CMSData()
-        CMS cms = new CMS()
-        cms.setCategoryId(423)
-
-        when: "excelToTableDao.addCMSDataBatch is called"
-        excelToTableDao.addCMSDataBatch(cmsdata, cms, mockPreparedStatement);
-
-        then: "It should throw exception"
-
-        cleanup:
-        mockPreparedStatement.close()
-
-    }
-
-    def 'API to delete Data - Exception'() {
-        given:
-        mockRootToThrowException()
-
-        when: "excelToTableDao.deleteData is called"
-        excelToTableDao.deleteData();
-
-        then: "It should throw exception"
-
-        cleanup:
-        mockToThrowException.tearDown()
-
-    }
-
-    def getCmsDataObject(String cmsId, String valueSetName, String qDMcategory, String code, String description, String codesystem) {
-        CMSData cmsdata = new CMSData();
-        cmsdata.setcMSID(cmsId);
-        cmsdata.setValueSetName(valueSetName);
-        cmsdata.setqDMCategory(qDMcategory);
-        cmsdata.setCode(code);
-        cmsdata.setDescription(description);
-        cmsdata.setCodeSystem(codesystem);
-        return cmsdata
-    }
-
-    def getMapOfCmsData(String cmsId, ArrayList list, String cmsName) {
-        Map<String, List<CMSData>> cmsDataMap = new HashMap<>()
-        list.add(getCmsDataObject(cmsName, "Anaphylactic Reaction to Common Baker's Yeast", "Condition/Diagnosis/Problem", "34015007", "Bakers asthma (disorder)", 'SNOMEDCT'));
-        list.add(getCmsDataObject(cmsName, "Anaphylactic Reaction to Common Baker's Yeast", "Condition/Diagnosis/Problem", "419447004", "Allergic reaction caused by flour dust (disorder)", 'SNOMEDCT'));
-        cmsDataMap.put(cmsId, list)
-        return cmsDataMap;
-    }
-
-    private static clearData() {
-        db.execute("DELETE FROM dl_cube_cms_data WHERE CMS_ID IN ('CMS117v9')")
-        db.execute("DELETE FROM DJ_CTL_CMS WHERE CMS_NAME IN ('CMS117v8-Test','CMS117v9-Test - 6B Section C')")
-    }
-
-    def mockRootToThrowException() {
-        mockToThrowException = new MockUp<Root>() {
-            @Mock
-            public static catalog.Root createDbConnection(catalog.Root oRootCon) throws Exception {
-                throw new Exception("Test Exception Case")
-            }
-        }
-    }
-
-    def cleanup() {
-        db?.close()
-        excelToTableDao?.closeConnection()
-
-    }
-
-    def cleanupSpec() {
-        db = DbUtil.getSqlInstance()
-
-        def con = db.getConnection()
-        def pstmt = con.prepareStatement("UPDATE itemkeys SET VALUE = ? WHERE NAME = ?")
-        pstmt.setString(1, intialCMSItemkeyValue)
-        pstmt.setString(2, 'udsflattablejobyear')
-        pstmt.executeUpdate()
-        pstmt.close()
-
-        db?.close()
-    }
-}
-
-
-
-
-
-
-def setup() {
-    db = DbUtil.getSqlInstance()
-
-    db.getConnection().withCloseable { con ->
-        con.prepareStatement("UPDATE itemkeys SET VALUE = ? WHERE NAME = ?").withCloseable { pstmt ->
-            pstmt.setString(1, '2024')
-            pstmt.setString(2, 'udsflattablejobyear')
-            pstmt.executeUpdate()
-        }
-    }
-}
 
 
