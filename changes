@@ -171,3 +171,39 @@ public String getDate(int qid, String c3, String c5, String c6, String c7, Strin
 }
 
 
+
+
+
+public String getSupportingFact(int qid, String c3, String c5, String c6, String c7, String c17, String c26, String c27) {
+    if ("0".equals(c3)) {
+        switch (qid) {
+            case 240:
+                return handleSupportingFactFor240(c27);
+            case 242:
+                return handleSupportingFactFor242(c26, c27);
+            default:
+                return handleSupportingFactsC3EqualsZero(qid, c5, c6, c7);
+        }
+    } else if ("1".equals(c3) && qid == 225) {
+        return handleSupportingFactsC3EqualsOne(c17);
+    }
+    return "";
+}
+
+
+
+private String handleSupportingFactFor240(String c27) {
+    if ("0".equals(c27)) return "Treatment Initiation Pending";
+    if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+    return "";
+}
+
+private String handleSupportingFactFor242(String c26, String c27) {
+    if ("0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+    if ("0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+    if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+    return "";
+}
+
+
+
