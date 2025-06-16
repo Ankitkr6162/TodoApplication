@@ -1,0 +1,125 @@
+getSupportingFact()
+
+
+.put(240, params -> {
+    String c3 = params[0];
+    String c27 = params[12];
+    if ("1".equals(c3)) return "";
+    if ("0".equals(c3) && "0".equals(c27)) return "Treatment Initiation Pending";
+    if ("0".equals(c3) && isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+    return null;
+})
+.put(242, params -> {
+    String c3 = params[0];
+    String c26 = params[11];
+    String c27 = params[12];
+    if ("1".equals(c3)) return "";
+    if ("0".equals(c3) && "0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+    if ("0".equals(c3) && "0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+    if ("0".equals(c3) && isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+    return null;
+})
+
+
+
+getDate()
+
+
+.put(240, params -> {
+    String c3 = params[0];
+    String c27 = params[12];
+    if ("1".equals(c3)) return "";
+    if ("0".equals(c3) && "0".equals(c27)) return "Treatment Initiation Pending";
+    if ("0".equals(c3) && isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+    return null;
+})
+.put(242, params -> {
+    String c3 = params[0];
+    String c26 = params[11];
+    String c27 = params[12];
+    if ("1".equals(c3)) return "";
+    if ("0".equals(c3) && "0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+    if ("0".equals(c3) && "0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+    if ("0".equals(c3) && isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+    return null;
+})
+
+
+
+
+
+public static final String GET_UDS_SUPPORTING_FACTS_QUERY = 
+    "SELECT DISTINCT p.pid AS 'Patient_id', ecd.qid, ecd.C3, ecd.C5, ecd.C6, ecd.C7, ecd.C9, ecd.C17, ecd.C26, ecd.C27\n" +
+    "FROM ebo_cde_detail ecd\n" +
+    "INNER JOIN patients p ON p.pid = ecd.c2\n" +
+    "INNER JOIN (\n" +
+    "    SELECT C2, qid, MAX(id) AS max_id\n" +
+    "    FROM ebo_cde_detail\n" +
+    "    WHERE qid IN (201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND cdeid = 2\n" +
+    "    GROUP BY C2, qid\n" +
+    ") latest ON latest.C2 = ecd.C2 AND latest.qid = ecd.qid AND latest.max_id = ecd.id\n" +
+    "WHERE ecd.qid IN (201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND ecd.C2 = ?";
+
+
+
+
+
+
+
+
+
+public Map<String, List<SupportingFact>> generateUDSMeasureSupportingFacts(int patientId) {
+    Map<String, List<SupportingFact>> supportingFactsMap = new HashMap<>();
+    Connection conn = null;
+    try {
+        conn = getConnection();
+        try (PreparedStatement preparedStatement = conn.prepareStatement(GET_UDS_SUPPORTING_FACTS_QUERY)) {
+            preparedStatement.setInt(1, patientId);
+            try (ResultSet rs = preparedStatement.executeQuery()) {
+                while (rs.next()) {
+                    int qid = rs.getInt("qid");
+                    String c3 = rs.getString("C3");
+                    String c5 = rs.getString("C5");
+                    String c6 = rs.getString("C6");
+                    String c7 = rs.getString("C7");
+                    String c9 = rs.getString("C9");
+                    String c17 = rs.getString("C17");
+                    String c26 = null;
+                    String c27 = null;
+
+                    // New fields for qid 240 and 242
+                    if (qid == 240 || qid == 242) {
+                        c26 = rs.getString("C26");
+                        c27 = rs.getString("C27");
+                    }
+
+                    String measureName = udsCdeUtil.getMeasureName(qid);
+                    SupportingFact supportingFact = new SupportingFact();
+                    supportingFact.setName(udsCdeUtil.getSupportingFact(qid, c3, c5, c6, c7, c17, c26, c27));
+                    supportingFact.setDate(udsCdeUtil.getDate(qid, c3, c5, c6, c7, c9, c17, c26, c27));
+
+                    // Append to existing list if already present
+                    supportingFactsMap.computeIfAbsent(measureName, k -> new ArrayList<>()).add(supportingFact);
+                }
+            }
+        }
+    } catch (Exception e) {
+        throw new UdsCdeException(e.getMessage());
+    } finally {
+        close(conn);
+    }
+    return supportingFactsMap;
+}
+
+
+
+
+
+
+
+In Util File 
+// Signature changes
+public String getSupportingFact(int qid, String c3, String c5, String c6, String c7, String c17, String c26, String c27) { ... }
+
+public String getDate(int qid, String c3, String c5, String c6, String c7, String c9, String c17, String c26, String c27) { ... }
+
