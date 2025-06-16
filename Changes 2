@@ -1,0 +1,90 @@
+public class UdsCdeUtil {
+
+    public String getMeasureName(int qid) {
+        switch (qid) {
+            case 201: return "Cervical Cancer Screening";
+            case 203: return "HIV Screening";
+            case 205: return "Adult BMI";
+            case 208: return "Colorectal Cancer Screening";
+            case 213: return "Childhood BMI";
+            case 218: return "IVD";
+            case 220: return "Depression Screening";
+            case 223: return "Depression Remission";
+            case 225: return "Diabetes";
+            case 228: return "Hypertension";
+            case 230: return "Statin Therapy";
+            case 232: return "Tobacco Screening";
+            case 235: return "Breast Cancer Screening";
+            case 240: return "SUD Initiation";
+            case 242: return "SUD Engagement";
+            default: return "Unknown Measure";
+        }
+    }
+
+    public void getComplianceStatus(Measure measure, int qid, String c3Value) {
+        if (c3Value == null) {
+            measure.setComplianceStatus("UNKNOWN");
+            return;
+        }
+        int c3 = Integer.parseInt(c3Value);
+        if (qid == 225) {
+            measure.setComplianceStatus(c3 == 0 ? "ACHIEVED" : "NOT ACHIEVED");
+        } else {
+            measure.setComplianceStatus(c3 == 0 ? "NOT ACHIEVED" : "ACHIEVED");
+        }
+    }
+
+    public String determineItemName(int qid, String c3Value, String description) {
+        if (qid == 225 && "1".equals(c3Value)) {
+            return description;
+        } else if (qid == 225 && "0".equals(c3Value)) {
+            return "";
+        }
+        return description;
+    }
+}
+
+
+
+
+
+
+
+public static final String GET_UDS_MEASURES_QUERY =
+    "SELECT ecd.qid, p.pid AS Patient_id, ecd.c3, os.EncounterID AS encounter_id, os.Description AS description " +
+    "FROM ebo_cde_detail ecd " +
+    "INNER JOIN patients p ON p.pid = ecd.c2 " +
+    "INNER JOIN ( " +
+    "    SELECT c2, qid, MAX(id) AS max_id " +
+    "    FROM ebo_cde_detail " +
+    "    WHERE qid IN (201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) AND cdeid = 2 " +
+    "    GROUP BY c2, qid " +
+    ") latest ON latest.c2 = ecd.c2 AND latest.qid = ecd.qid AND latest.max_id = ecd.id " +
+    "LEFT JOIN ( " +
+    "    SELECT os.EncounterID, os.Description, CASE " +
+    "        WHEN os.Description = 'UDS_Cervical_Cancer_Screening' THEN 201 " +
+    "        WHEN os.Description = 'UDS_Breast_Cancer_Screening' THEN 235 " +
+    "        WHEN os.Description = 'UDS_Childhood_BMI' THEN 213 " +
+    "        WHEN os.Description = 'UDS_Adult_BMI' THEN 205 " +
+    "        WHEN os.Description = 'UDS_Tobacco_Cessation' THEN 232 " +
+    "        WHEN os.Description = 'UDS_Statin_Therapy' THEN 230 " +
+    "        WHEN os.Description = 'UDS_IVD' THEN 218 " +
+    "        WHEN os.Description = 'UDS_Colorectal_Cancer_Screening' THEN 208 " +
+    "        WHEN os.Description = 'UDS_HIV_Screening' THEN 203 " +
+    "        WHEN os.Description = 'UDS_Depression_Screening' THEN 220 " +
+    "        WHEN os.Description = 'UDS_Depression_Remission' THEN 223 " +
+    "        WHEN os.Description = 'UDS_Hypertension' THEN 228 " +
+    "        WHEN os.Description = 'UDS_Diabetes' THEN 225 " +
+    "        WHEN os.Description = 'UDS_SUD_Initiation' THEN 240 " +
+    "        WHEN os.Description = 'UDS_SUD_Engagement' THEN 242 " +
+    "    END AS qid " +
+    "    FROM ORDERSETS os " +
+    "    INNER JOIN ( " +
+    "        SELECT MAX(EncounterID) AS EncounterID, Description " +
+    "        FROM ORDERSETS " +
+    "        WHERE DELETEFLAG = 0 " +
+    "        GROUP BY Description " +
+    "    ) maxos ON maxos.EncounterID = os.EncounterID " +
+    ") os ON os.qid = ecd.qid " +
+    "WHERE ecd.qid IN (201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) " +
+    "AND ecd.cdeid = 2 AND ecd.c2 = ?";
