@@ -207,3 +207,98 @@ private String handleSupportingFactFor242(String c26, String c27) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+public String getSupportingFact(int qid, Map<String, String> params) {
+        if (qid == 240) return handleSupportingFactFor240(params);
+        if (qid == 242) return handleSupportingFactFor242(params);
+        if ("0".equals(params.get("c3"))) {
+            return handleSupportingFactsC3EqualsZero(qid, params.get("c5"), params.get("c6"), params.get("c7"));
+        } else if ("1".equals(params.get("c3")) && qid == 225) {
+            return handleSupportingFactsC3EqualsOne(params.get("c17"));
+        }
+        return "";
+    }
+
+
+
+ private String handleSupportingFactFor240(Map<String, String> params) {
+        String c3 = params.get("c3");
+        String c27 = params.get("c27");
+        if ("1".equals(c3)) return "";
+        if ("0".equals(c3) && "0".equals(c27)) return "Treatment Initiation Pending";
+        if ("0".equals(c3) && isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+        return null;
+    }
+
+    private String handleSupportingFactFor242(Map<String, String> params) {
+        String c3 = params.get("c3");
+        String c26 = params.get("c26");
+        String c27 = params.get("c27");
+        if ("1".equals(c3)) return "";
+        if ("0".equals(c3) && "0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+        if ("0".equals(c3) && "0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+        if ("0".equals(c3) && isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+        return null;
+    }
+
+
+
+
+
+public Map<String, List<SupportingFact>> generateUDSMeasureSupportingFacts(int patientId) {
+    Map<String, List<SupportingFact>> supportingFactsMap = new HashMap<>();
+    Connection conn = null;
+    try {
+        conn = getConnection();
+        try (PreparedStatement preparedStatement = conn.prepareStatement(GET_UDS_SUPPORTING_FACTS_QUERY)) {
+            preparedStatement.setInt(1, patientId);
+            try (ResultSet rs = preparedStatement.executeQuery()) {
+                while (rs.next()) {
+                    int qid = rs.getInt("qid");
+
+                    // Collect all needed parameters in a map
+                    Map<String, String> paramMap = new HashMap<>();
+                    paramMap.put("c3", rs.getString("C3"));
+                    paramMap.put("c5", rs.getString("C5"));
+                    paramMap.put("c6", rs.getString("C6"));
+                    paramMap.put("c7", rs.getString("C7"));
+                    paramMap.put("c9", rs.getString("C9"));
+                    paramMap.put("c17", rs.getString("C17"));
+
+                    if (qid == 240 || qid == 242) {
+                        paramMap.put("c26", rs.getString("C26"));
+                        paramMap.put("c27", rs.getString("C27"));
+                    }
+
+                    String measureName = udsCdeUtil.getMeasureName(qid);
+                    SupportingFact supportingFact = new SupportingFact();
+                    supportingFact.setName(udsCdeUtil.getSupportingFact(qid, paramMap));
+                    supportingFact.setDate(udsCdeUtil.getDate(qid, paramMap));
+
+                    supportingFactsMap.computeIfAbsent(measureName, k -> new ArrayList<>()).add(supportingFact);
+                }
+            }
+        }
+    } catch (Exception e) {
+        throw new UdsCdeException(e.getMessage());
+    } finally {
+        close(conn);
+    }
+    return supportingFactsMap;
+}
+
+
+
+
