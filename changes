@@ -123,3 +123,51 @@ public String getSupportingFact(int qid, String c3, String c5, String c6, String
 
 public String getDate(int qid, String c3, String c5, String c6, String c7, String c9, String c17, String c26, String c27) { ... }
 
+
+
+
+
+
+
+public String getSupportingFact(int qid, String c3, String c5, String c6, String c7, String c17, String c26, String c27) {
+    if ("0".equals(c3)) {
+        if (qid == 240) {
+            if ("0".equals(c27)) return "Treatment Initiation Pending";
+            if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+        } else if (qid == 242) {
+            if ("0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+            if ("0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+            if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+        } else {
+            return handleSupportingFactsC3EqualsZero(qid, c5, c6, c7);
+        }
+    } else if ("1".equals(c3) && qid == 225) {
+        return handleSupportingFactsC3EqualsOne(c17);
+    }
+
+    return "";
+}
+
+
+
+
+public String getDate(int qid, String c3, String c5, String c6, String c7, String c9, String c17, String c26, String c27) {
+    if ("0".equals(c3)) {
+        if (qid == 240) {
+            if ("0".equals(c27)) return "Treatment Initiation Pending";
+            if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+        } else if (qid == 242) {
+            if ("0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+            if ("0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+            if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+        } else {
+            return handleDateC3EqualsZeroForDate(qid, c5, c6, c7, c9);
+        }
+    } else if ("1".equals(c3) && qid == 225) {
+        return handleDateC3EqualsOneForDate(c17);
+    }
+
+    return "";
+}
+
+
