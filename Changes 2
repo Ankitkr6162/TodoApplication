@@ -88,3 +88,252 @@ public static final String GET_UDS_MEASURES_QUERY =
     ") os ON os.qid = ecd.qid " +
     "WHERE ecd.qid IN (201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) " +
     "AND ecd.cdeid = 2 AND ecd.c2 = ?";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE TABLE ebo_cde_detail (  
+id int IDENTITY(1,1) NOT NULL,  
+logdatetime datetime NOT NULL,  
+cdeid int NOT NULL,  
+cdename varchar(255) NOT NULL,  
+qid int NOT NULL,  
+qname varchar(255) NOT NULL,  
+lastmodified datetime NOT NULL,  
+C1 varchar(255) NULL,  
+C2 varchar(255) NULL,  
+C3 varchar(255) NULL,  
+C4 varchar(255) NULL,  
+C5 varchar(255) NULL,  
+C6 varchar(255) NULL,  
+C7 varchar(255) NULL,  
+C8 varchar(255) NULL,  
+C9 varchar(255) NULL,  
+C10 varchar(255) NULL,  
+C11 varchar(255) NULL,  
+C12 varchar(255) NULL,  
+C13 varchar(255) NULL,  
+C14 varchar(255) NULL,  
+C15 varchar(255) NULL,  
+C16 varchar(255) NULL,  
+C17 varchar(255) NULL,  
+C18 varchar(255) NULL,  
+C19 varchar(255) NULL,  
+C20 varchar(255) NULL,  
+C21 varchar(255) NULL,  
+C22 varchar(255) NULL,  
+C23 varchar(255) NULL,  
+C24 varchar(255) NULL,  
+C25 varchar(255) NULL,  
+C26 varchar(255) NULL,  
+C27 varchar(255) NULL,  
+C28 varchar(255) NULL,  
+C29 varchar(255) NULL,  
+C30 varchar(255) NULL,  
+C31 varchar(255) NULL,  
+C32 varchar(255) NULL,  
+C33 varchar(255) NULL,  
+C34 varchar(255) NULL,  
+C35 varchar(255) NULL,  
+C36 varchar(255) NULL,  
+C37 varchar(255) NULL,  
+C38 varchar(255) NULL,  
+C39 varchar(255) NULL,  
+C40 varchar(255) NULL,  
+C41 varchar(255) NULL,  
+C42 varchar(255) NULL,  
+C43 varchar(255) NULL,  
+C44 varchar(255) NULL,  
+C45 varchar(255) NULL,  
+C46 varchar(255) NULL,  
+C47 varchar(255) NULL,  
+C48 varchar(255) NULL,  
+C49 varchar(255) NULL,  
+C50 varchar(255) NULL,  
+C51 varchar(255) NULL,  
+C52 varchar(255) NULL,  
+C53 varchar(255) NULL,  
+C54 varchar(255) NULL,  
+C55 varchar(255) NULL,  
+C56 varchar(255) NULL,  
+C57 varchar(255) NULL,  
+C58 varchar(255) NULL,  
+C59 varchar(255) NULL,  
+C60 varchar(255) NULL,  
+C61 varchar(255) NULL,  
+C62 varchar(255) NULL,  
+C63 varchar(255) NULL,  
+C64 varchar(255) NULL,  
+C65 varchar(255) NULL,  
+C66 varchar(255) NULL,  
+C67 varchar(255) NULL,  
+C68 varchar(255) NULL,  
+C69 varchar(255) NULL,  
+C70 varchar(255) NULL,  
+C71 varchar(255) NULL,  
+C72 varchar(255) NULL,  
+C73 varchar(255) NULL,  
+C74 varchar(255) NULL,  
+C75 varchar(255) NULL,  
+C76 varchar(255) NULL,  
+C77 varchar(255) NULL,  
+C78 varchar(255) NULL,  
+C79 varchar(255) NULL,  
+C80 varchar(255) NULL,  
+C81 varchar(255) NULL,  
+C82 varchar(255) NULL,  
+C83 varchar(255) NULL,  
+C84 varchar(255) NULL,  
+C85 varchar(255) NULL,  
+C86 varchar(255) NULL,  
+C87 varchar(255) NULL,  
+C88 varchar(255) NULL,  
+C89 varchar(255) NULL,  
+C90 varchar(255) NULL,  
+C91 varchar(255) NULL,  
+C92 varchar(255) NULL,  
+C93 varchar(255) NULL,  
+C94 varchar(255) NULL,  
+C95 varchar(255) NULL,  
+C96 varchar(255) NULL,  
+C97 varchar(255) NULL,  
+C98 varchar(255) NULL,  
+C99 varchar(255) NULL,  
+C100 varchar(255) NULL,  
+C101 varchar(255) NULL,  
+C102 varchar(255) NULL,  
+C103 varchar(255) NULL,  
+C104 varchar(255) NULL,  
+C105 varchar(255) NULL,  
+C106 varchar(255) NULL,  
+C107 varchar(255) NULL,  
+C108 varchar(255) NULL,  
+C109 varchar(255) NULL,  
+C110 varchar(255) NULL,  
+C111 varchar(255) NULL,  
+C112 varchar(255) NULL,  
+C113 varchar(255) NULL,  
+C114 varchar(255) NULL,  
+C115 varchar(255) NULL,  
+C116 varchar(255) NULL,  
+C117 varchar(255) NULL,  
+C118 varchar(255) NULL,  
+C119 varchar(255) NULL,  
+C120 varchar(255) NULL,  
+C121 varchar(255) NULL,  
+C122 varchar(255) NULL,  
+C123 varchar(255) NULL,  
+C124 varchar(255) NULL,  
+C125 varchar(255) NULL,  
+C126 varchar(255) NULL,  
+C127 varchar(255) NULL,  
+C128 varchar(255) NULL,  
+C129 varchar(255) NULL,  
+C130 varchar(255) NULL,  
+C131 varchar(255) NULL,  
+C132 varchar(255) NULL,  
+C133 varchar(255) NULL,  
+C134 varchar(255) NULL,  
+C135 varchar(255) NULL,  
+C136 varchar(255) NULL,  
+C137 varchar(255) NULL,  
+C138 varchar(255) NULL,  
+C139 varchar(255) NULL,  
+C140 varchar(255) NULL,  
+C141 varchar(255) NULL,  
+C142 varchar(255) NULL,  
+C143 varchar(255) NULL,  
+C144 varchar(255) NULL,  
+C145 varchar(255) NULL,  
+C146 varchar(255) NULL,  
+C147 varchar(255) NULL,  
+C148 varchar(255) NULL,  
+C149 varchar(255) NULL,  
+C150 varchar(255) NULL,  
+C151 varchar(255) NULL,  
+C152 varchar(255) NULL,  
+C153 varchar(255) NULL,  
+C154 varchar(255) NULL,  
+C155 varchar(255) NULL,  
+C156 varchar(255) NULL,  
+C157 varchar(255) NULL,  
+C158 varchar(255) NULL,  
+C159 varchar(255) NULL,  
+C160 varchar(255) NULL,  
+C161 varchar(255) NULL,  
+C162 varchar(255) NULL,  
+C163 varchar(255) NULL,  
+C164 varchar(255) NULL,  
+C165 varchar(255) NULL,  
+C166 varchar(255) NULL,  
+C167 varchar(255) NULL,  
+C168 varchar(255) NULL,  
+C169 varchar(255) NULL,  
+C170 varchar(255) NULL,  
+C171 varchar(255) NULL,  
+C172 varchar(255) NULL,  
+C173 varchar(255) NULL,  
+C174 varchar(255) NULL,  
+C175 varchar(255) NULL,  
+C176 varchar(255) NULL,  
+C177 varchar(255) NULL,  
+C178 varchar(255) NULL,  
+C179 varchar(255) NULL,  
+C180 varchar(255) NULL,  
+C181 varchar(255) NULL,  
+C182 varchar(255) NULL,  
+C183 varchar(255) NULL,  
+C184 varchar(255) NULL,  
+C185 varchar(255) NULL,  
+C186 varchar(255) NULL,  
+C187 varchar(255) NULL,  
+C188 varchar(255) NULL,  
+C189 varchar(255) NULL,  
+C190 varchar(255) NULL,  
+CONSTRAINT FK_ebo_cde_detail_cdeid FOREIGN KEY (cdeid) REFERENCES ebo_cde_master_program (cdeid),  
+CONSTRAINT PK_ebo_cde_detail_id PRIMARY KEY (id)  
+); 
