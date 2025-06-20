@@ -1,0 +1,1667 @@
+@RestController
+@Lazy
+@RequestMapping("/global-mapping-packages")
+public class EboGlobalMappingPackageController {
+
+
+    public final EboGlobalMappingPackageService packageService;
+
+    public EboGlobalMappingPackageController(EboGlobalMappingPackageService packageService) {
+        this.packageService = packageService;
+    }
+
+    @GetMapping("/get-all-packages")
+    public ResponseEntity<List<EboGlobalMappingPackage>> getAllPackages() {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(packageService.getAllPackages());
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ArrayList<>());
+    }
+
+    @GetMapping("/get-all-active-packages")
+    public ResponseEntity<List<EboGlobalMappingPackage>> getAllActivePackages() {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(packageService.getAllActivePackages());
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ArrayList<>());
+    }
+
+    @PostMapping("/update-packages")
+    public ResponseEntity<Map<String, String>> updatePackages(@RequestBody List<EboGlobalMappingPackage> packages, HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            packageService.updatePackages(packages, userId);
+            Map<String, String> response = new HashMap<>();
+            response.put(FIELD_MESSAGE, MSG_PACKAGE_UPDATED);
+            return ResponseEntity.ok().body(response);
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new HashMap<>());
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+@Repository
+public class EboGlobalMappingPackageRepository {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(EboGlobalMappingPackageRepository.class);
+
+    public final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
+    public EboGlobalMappingPackageRepository(NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
+    }
+
+    public List<EboGlobalMappingPackage> getAllPackages() {
+        try {
+            return namedParameterJdbcTemplate.query(GET_ALL_PACKAGES, new BeanPropertyRowMapper<>(EboGlobalMappingPackage.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllPackages",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public List<EboGlobalMappingPackage> getAllActivePackages() {
+        try {
+            return namedParameterJdbcTemplate.query(GET_ALL_ACTIVE_PACKAGES, new BeanPropertyRowMapper<>(EboGlobalMappingPackage.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllActivePackages",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public void updatePackages(List<EboGlobalMappingPackage> packages, int userId) {
+        try {
+            Map<Integer, List<Integer>> groupedPackages = packages.stream()
+                    .collect(Collectors.groupingBy(
+                            EboGlobalMappingPackage::getActiveFlag,
+                            Collectors.mapping(EboGlobalMappingPackage::getPackageId, Collectors.toList())
+                    ));
+
+            for (Map.Entry<Integer, List<Integer>> entry : groupedPackages.entrySet()) {
+                Map<String, Object> params = new HashMap<>();
+                params.put(FIELD_ACTIVE_FLAG, entry.getKey());
+                params.put(FIELD_PACKAGE_IDS, entry.getValue());
+                namedParameterJdbcTemplate.update(UPDATE_PROGRAM_QUERY, params);
+                makeEntryInEboGmConfigLogs(userId, entry.getValue().toString(), PROGRAM_UPDATED, entry.getKey() == 0 ? INACTIVATED_MSG : ACTIVATED_MSG);
+            }
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in updatePackages",e);
+        }
+    }
+
+    public Integer makeEntryInEboGmConfigLogs(int userId, String configId, String configType, String logType) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_UID, userId);
+            sqlParameters.addValue(FIELD_NAME_CONFIG_ID, configId);
+            sqlParameters.addValue(FIELD_NAME_CONFIG_TYPE, configType);
+            sqlParameters.addValue(FIELD_NAME_lOG_TYPE, logType);
+            return namedParameterJdbcTemplate.update(MAKE_ENTRY_IN_GM_CONFIG_LOGS, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in makeEntryInEboGmConfigLogs",e);
+        }
+        return 0;
+    }
+
+}
+
+
+
+
+
+
+@Service
+public class EboGlobalMappingPackageService {
+
+
+    public final EboGlobalMappingPackageRepository packageRepository;
+
+    public EboGlobalMappingPackageService(EboGlobalMappingPackageRepository packageRepository) {
+        this.packageRepository = packageRepository;
+    }
+
+    public List<EboGlobalMappingPackage> getAllPackages() {
+        return packageRepository.getAllPackages();
+    }
+
+    public List<EboGlobalMappingPackage> getAllActivePackages() {
+        return packageRepository.getAllActivePackages();
+    }
+
+    public void updatePackages(List<EboGlobalMappingPackage> packages ,int userId) {
+        packageRepository.updatePackages(packages,userId);
+    }
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@RestController
+@Lazy
+@RequestMapping("/global-mapping-reports")
+public class EboGlobalMappingReportController {
+
+
+    public final EboGlobalMappingReportService reportService;
+
+    public EboGlobalMappingReportController(EboGlobalMappingReportService reportService) {
+        this.reportService = reportService;
+    }
+
+    @GetMapping("/get-all-reports")
+    public ResponseEntity<List<EboGlobalMappingReport>> getAllReports(@RequestParam(value = FIELD_NAME_PACKAGE_ID) int packageId) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(reportService.getAllReports(packageId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ArrayList<>());
+    }
+
+    @GetMapping("/get-all-active-reports")
+    public ResponseEntity<List<EboGlobalMappingReport>> getAllActiveReports(@RequestParam(value = FIELD_NAME_PACKAGE_ID) int packageId) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(reportService.getAllActiveReports(packageId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ArrayList<>());
+    }
+
+
+    @PostMapping("/update-reports")
+    public ResponseEntity<Map<String, String>> updateReports(@RequestBody List<EboGlobalMappingReport> reports, HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            reportService.updateReports(reports, userId);
+            Map<String, String> response = new HashMap<>();
+            response.put(FIELD_MESSAGE, MSG_REPORTS_UPDATED);
+            return ResponseEntity.ok().body(response);
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new HashMap<>());
+    }
+}
+
+
+
+
+
+
+@Repository
+public class EboGlobalMappingReportRepository {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(EboGlobalMappingReportRepository.class);
+
+    public final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final EboGlobalMappingPackageRepository packageRepository;
+
+    public EboGlobalMappingReportRepository(NamedParameterJdbcTemplate namedParameterJdbcTemplate, EboGlobalMappingPackageRepository packageRepository) {
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
+        this.packageRepository = packageRepository;
+    }
+
+    public List<EboGlobalMappingReport> getAllReports(int packageId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            return namedParameterJdbcTemplate.query(GET_ALL_REPORTS, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingReport.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllReports",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public List<EboGlobalMappingReport> getAllActiveReports(int packageId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            List<EboGlobalMappingReport> list = namedParameterJdbcTemplate.query(GET_ALL_ACTIVE_REPORTS, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingReport.class));
+            for (EboGlobalMappingReport report : list) {
+                report.setFilterCount(getReportFilterCount(packageId, report.getReportId()));
+            }
+            return list;
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllActiveReports",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public Integer getReportFilterCount(int packageId, int reportId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            return namedParameterJdbcTemplate.queryForObject(GET_REPORT_FILTER_COUNT, sqlParameters, Integer.class);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getReportFilterCount",e);
+        }
+        return 0;
+    }
+
+    public void updateReports(List<EboGlobalMappingReport> reports, int userId) {
+        try {
+            Map<String, List<EboGlobalMappingReport>> groupedReports = reports.stream()
+                    .collect(Collectors.groupingBy(report -> report.getActiveFlag() + "-" + report.getPackageId()));
+
+            for (Map.Entry<String, List<EboGlobalMappingReport>> entry : groupedReports.entrySet()) {
+                Map<String, Object> params = new HashMap<>();
+                params.put(FIELD_ACTIVE_FLAG, Integer.parseInt(entry.getKey().substring(0, 1)));
+                List<Integer> reportIds = entry.getValue().stream().map(EboGlobalMappingReport::getReportId).collect(Collectors.toList());
+                params.put(FIELD_REPORT_IDS, reportIds);
+                params.put(FIELD_NAME_PACKAGE_ID, Integer.parseInt(entry.getKey().substring(2)));
+                namedParameterJdbcTemplate.update(UPDATE_REPORT_QUERY, params);
+                packageRepository.makeEntryInEboGmConfigLogs(userId, LOG_MSG_PACKAGEIDS + (Integer.parseInt(entry.getKey().substring(2)) + LOG_MSG_REPORTIDS + reportIds), REPORT_UPDATED, Integer.parseInt(entry.getKey().substring(0, 1)) == 0 ? INACTIVATED_MSG : ACTIVATED_MSG);
+            }
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in updateReports",e);
+        }
+
+    }
+}
+
+
+
+
+
+
+@Service
+public class EboGlobalMappingReportService {
+
+    public final EboGlobalMappingReportRepository reportRepository;
+
+    public EboGlobalMappingReportService(EboGlobalMappingReportRepository reportRepository) {
+        this.reportRepository = reportRepository;
+    }
+
+    public List<EboGlobalMappingReport> getAllReports(int packageId) {
+        return reportRepository.getAllReports(packageId);
+    }
+
+    public List<EboGlobalMappingReport> getAllActiveReports(int packageId) {
+        return reportRepository.getAllActiveReports(packageId);
+    }
+
+    public void updateReports(List<EboGlobalMappingReport> reports,int userId) {
+        reportRepository.updateReports(reports,userId);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@RestController
+@RequestMapping("/global-mapping-categories")
+public class EboGlobalMappingCategoriesController {
+
+
+    private final EboGlobalMappingCategoriesService eboGlobalMappingCategoriesService;
+
+    public EboGlobalMappingCategoriesController(EboGlobalMappingCategoriesService eboGlobalMappingCategoriesService) {
+        this.eboGlobalMappingCategoriesService = eboGlobalMappingCategoriesService;
+    }
+
+    @GetMapping("/get-all-active-categories")
+    public ResponseEntity<List<EboGlobalMappingCategories>> getAllActiveCategories() {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            List<EboGlobalMappingCategories> categories = eboGlobalMappingCategoriesService.getAllActiveCategories();
+            return ResponseEntity.ok().body(categories);
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ArrayList<>());
+    }
+
+    @GetMapping("/get-all-categories")
+    public ResponseEntity<List<EboGlobalMappingCategories>> getAllCategories() {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingCategoriesService.getAllCategories());
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ArrayList<>());
+    }
+
+    @GetMapping("/get-all-categories-data")
+    public ResponseEntity<String> getAllCategoriesData(@RequestParam(value = FIELD_NAME_CAT_ID) Integer catId) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingCategoriesService.getAllCategoriesData(catId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+
+    @GetMapping("/get-category-ui-fields")
+    public ResponseEntity<List<EboGlobalMappingCategoryUIFields>> getFieldsOfCategoryForCopyData(@RequestParam(value = FIELD_NAME_CAT_ID) Integer catId) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingCategoriesService.getFieldsOfCategoryForCopyData(catId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ArrayList<>());
+    }
+
+    @GetMapping("/get-providerAttributionList")
+    public ResponseEntity<String> getProviderAttributionList(@RequestParam(value = FIELD_NAME_CAT_ID) Integer catId) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingCategoriesService.getProviderAttributionList(catId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("/update-category")
+    public ResponseEntity<Map<String, String>> updateCategory(@RequestBody List<EboGlobalMappingCategories> categories, HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            eboGlobalMappingCategoriesService.updateCategory(categories, userId);
+            Map<String, String> response = new HashMap<>();
+            response.put(FIELD_MESSAGE, MSG_CATEGORY_UPDATED);
+            return ResponseEntity.ok().body(response);
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new HashMap<>());
+    }
+
+
+}
+
+
+
+
+
+
+@Repository
+public class EboGlobalMappingCategoriesRepository {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(EboGlobalMappingCategoriesRepository.class);
+
+    private final NamedParameterJdbcTemplate parameterJdbcTemplate;
+    private final EboGlobalMappingPackageRepository packageRepository;
+
+    public EboGlobalMappingCategoriesRepository(NamedParameterJdbcTemplate parameterJdbcTemplate, EboGlobalMappingPackageRepository packageRepository) {
+        this.parameterJdbcTemplate = parameterJdbcTemplate;
+        this.packageRepository = packageRepository;
+    }
+
+    public List<EboGlobalMappingCategories> getAllActiveCategories() {
+        try {
+            return parameterJdbcTemplate.query(GET_ALL_ACTIVE_CATEGORIES_QUERY, new BeanPropertyRowMapper<>(EboGlobalMappingCategories.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllActiveCategories",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public List<EboGlobalMappingCategories> getAllCategories() {
+        try {
+            return parameterJdbcTemplate.query(GET_ALL_CATEGORIES_QUERY, new BeanPropertyRowMapper<>(EboGlobalMappingCategories.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllCategories",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public List<EboGlobalMappingCategoryUIFields> getFieldsOfCategory(Integer queryId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_QUERY_ID, queryId);
+            return parameterJdbcTemplate.query(GET_FIELDS_OF_CATEGORY_QUERY, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingCategoryUIFields.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getFieldsOfCategory",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public EboGlobalMappingQueryDTO getCategoryQuery(Integer catId) {
+        try {
+            EboGlobalMappingQueryDTO queryDTO = new EboGlobalMappingQueryDTO();
+            List<Map<String, Object>> rows;
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            rows = SqlTranslator.isDbMySql() ? parameterJdbcTemplate.queryForList(GET_MYSQL_QUERY_OF_CATEGORY_QUERY, sqlParameters) : parameterJdbcTemplate.queryForList(GET_MSSQL_QUERY_OF_CATEGORY_QUERY, sqlParameters);
+            JSONArray jsonArray = new JSONArray();
+            for (Map<String, Object> row : rows) {
+                JSONObject obj = new JSONObject(row);
+                jsonArray.put(obj);
+            }
+            JSONObject o = jsonArray.getJSONObject(0);
+            queryDTO.setQueryId(o.getInt(FIELD_NAME_QUERY_ID));
+            if (SqlTranslator.isDbMySql()) {
+                queryDTO.setQuery(o.getString(FIELD_NAME_MYSQL_QUERY));
+            } else {
+                queryDTO.setQuery(o.getString(FIELD_NAME_MSSQL_QUERY));
+            }
+            return queryDTO;
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getCategoryQuery",e);
+        }
+        return null;
+    }
+
+    public JSONObject getAllCategoriesData(EboGlobalMappingQueryDTO queryDTO) {
+        try {
+            String decryptedQuery = EncryptionUtil.decrypt(queryDTO.getQuery());
+            assert decryptedQuery != null;
+            List<Map<String, Object>> rows = parameterJdbcTemplate.queryForList(decryptedQuery, new MapSqlParameterSource());
+            JSONObject jsonObject = new JSONObject();
+            JSONArray jsonArray = new JSONArray();
+            for (Map<String, Object> row : rows) {
+                JSONObject obj = new JSONObject(row);
+                jsonArray.put(obj);
+            }
+            jsonObject.put(FIELD_NAME_CATEGORY_DATA, jsonArray);
+            jsonObject.put(FIELD_NAME_CATEGORY_FIELDS, getFieldsOfCategory(queryDTO.getQueryId()));
+            jsonObject.put(FIELD_SAVE_FIELD, getSaveField(queryDTO.getQueryId()));
+
+            return jsonObject;
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllCategoriesData",e);
+        }
+        return null;
+    }
+
+    private String getSaveField(Integer queryId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_QUERY_ID, queryId);
+            return parameterJdbcTemplate.queryForObject(GET_SAVE_VALUE_FOR_QUERY, sqlParameters, String.class);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getSaveField",e);
+        }
+        return "";
+    }
+
+    public String getProviderAttributionList(Integer catId) {
+        try {
+            EboGlobalMappingQueryDTO queryDTO = getCategoryQuery(catId);
+            if (queryDTO != null) {
+                String decryptedQuery = EncryptionUtil.decrypt(queryDTO.getQuery());
+                assert decryptedQuery != null;
+                List<Map<String, Object>> rows = parameterJdbcTemplate.queryForList(decryptedQuery, new MapSqlParameterSource());
+                JSONObject jsonObject = new JSONObject();
+                JSONArray jsonArray = new JSONArray();
+                for (Map<String, Object> row : rows) {
+                    JSONObject obj = new JSONObject(row);
+                    jsonArray.put(obj);
+                }
+                jsonObject.put(FIELD_NAME_CATEGORY_DATA, jsonArray);
+                return jsonObject.toString();
+            }
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getProviderAttributionList",e);
+        }
+        return "";
+    }
+
+    public void updateCategory(List<EboGlobalMappingCategories> categories, int userId) {
+        try {
+            Map<Integer, List<Integer>> groupedCategory = categories.stream()
+                    .collect(Collectors.groupingBy(
+                            EboGlobalMappingCategories::getActiveFlag,
+                            Collectors.mapping(EboGlobalMappingCategories::getCatId, Collectors.toList())
+                    ));
+
+            for (Map.Entry<Integer, List<Integer>> entry : groupedCategory.entrySet()) {
+                Map<String, Object> params = new HashMap<>();
+                params.put(FIELD_ACTIVE_FLAG, entry.getKey());
+                params.put(FIELD_CAT_IDS, entry.getValue());
+                parameterJdbcTemplate.update(UPDATE_CATEGORY_QUERY, params);
+                packageRepository.makeEntryInEboGmConfigLogs(userId, entry.getValue().toString(), CATEGORY_UPDATED, entry.getKey() == 0 ? INACTIVATED_MSG : ACTIVATED_MSG);
+            }
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in updateCategory",e);
+        }
+    }
+}
+
+
+
+
+
+
+
+@Service
+public class EboGlobalMappingCategoriesService {
+
+
+
+    private final EboGlobalMappingCategoriesRepository globalMappingCategoriesRepository;
+
+    public EboGlobalMappingCategoriesService(EboGlobalMappingCategoriesRepository globalMappingCategoriesRepository) {
+        this.globalMappingCategoriesRepository = globalMappingCategoriesRepository;
+    }
+
+    public List<EboGlobalMappingCategories> getAllActiveCategories() {
+        return globalMappingCategoriesRepository.getAllActiveCategories();
+    }
+
+    public List<EboGlobalMappingCategories> getAllCategories() {
+        return globalMappingCategoriesRepository.getAllCategories();
+    }
+
+    public String getAllCategoriesData(Integer catId) {
+        EboGlobalMappingQueryDTO query = globalMappingCategoriesRepository.getCategoryQuery(catId);
+        JSONObject data = globalMappingCategoriesRepository.getAllCategoriesData(query);
+        return data.toString();
+    }
+
+    public List<EboGlobalMappingCategoryUIFields> getFieldsOfCategoryForCopyData(int catId) {
+            EboGlobalMappingQueryDTO query = globalMappingCategoriesRepository.getCategoryQuery(catId);
+            return globalMappingCategoriesRepository.getFieldsOfCategory(query.getQueryId());
+    }
+
+    public String getProviderAttributionList(Integer catId) {
+        return globalMappingCategoriesRepository.getProviderAttributionList(catId);
+    }
+
+    public void updateCategory(List<EboGlobalMappingCategories> categories,int userId) {
+        globalMappingCategoriesRepository.updateCategory(categories,userId);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+@RestController
+@Lazy
+@RequestMapping("/global-mapping-mapvalue")
+public class EboGlobalMappingMapAndFilterValueController {
+
+    public final EboGlobalMappingMapAndFilterValueService eboGlobalMappingMapService;
+
+    public EboGlobalMappingMapAndFilterValueController(EboGlobalMappingMapAndFilterValueService eboGlobalMappingMapService) {
+        this.eboGlobalMappingMapService = eboGlobalMappingMapService;
+    }
+
+
+    @PostMapping("/save-filterValue")
+    public ResponseEntity<String> saveFilterValue(@RequestBody List<EboGlobalMappingFilterValue> filterValues, HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.saveFilterValue(filterValues, userId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("/save-mapValue")
+    public ResponseEntity<String> saveMapValue(@RequestBody List<EboGlobalMappingMapValue> mapValue, HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.saveMapValue(mapValue, userId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @GetMapping("/get-filterAndMapping")
+    public ResponseEntity<String> getFilterAndMapping(@RequestParam(value = FIELD_NAME_PACKAGE_ID) int packageId, @RequestParam(value = FIELD_NAME_REPORT_ID) int reportId, @RequestParam(value = FIELD_NAME_CAT_ID) int catId) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.getAllFilterAndMappingCategories(packageId, reportId, catId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("/get-CopyData")
+    public ResponseEntity<String> getMappedValuesForCopyData(@RequestBody CopyDataFilterMapDTO filterMapDTO) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.getMappedValuesForCopyData(filterMapDTO));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("/save-masterFilter")
+    public ResponseEntity<String> saveMasterFilter(@RequestBody EboGlobalMappingMasterFilter masterFilter,HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.saveMasterFilter(masterFilter, userId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("updateTag")
+    public ResponseEntity<String> updateTag(@RequestParam(value = FIELD_NAME_PACKAGE_ID) int packageId, @RequestParam(value = FIELD_NAME_REPORT_ID) int reportId,@RequestParam(value = FIELD_NAME_CAT_ID) int catId, @RequestParam(value = FIELD_NAME_OLD_TAG) String oldTag, @RequestParam(value = FIELD_NAME_TAG) String tag, HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.updateTag(packageId, reportId, catId, oldTag, tag, userId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+
+    @PostMapping("/save-masterMapping")
+    public ResponseEntity<String> saveMasterMapping(@RequestBody EboGlobalMappingMasterMapping masterMapping,HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.saveMasterMapping(masterMapping, userId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @GetMapping("/get-AllFilterMappingValues")
+    public ResponseEntity<String> getAllFilterMappingValues(@RequestParam(value = FIELD_NAME_PACKAGE_ID) int packageId, @RequestParam(value = FIELD_NAME_REPORT_ID) int reportId) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.getAllFilterMappingValues(packageId, reportId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @GetMapping(value="/get-AvailableFilterData")
+    public ResponseEntity<String> getAvailableFilterData(@RequestParam(value = FIELD_NAME_CAT_ID) int catId,@RequestParam(value = FIELD_NAME_PACKAGE_ID) int packageId, @RequestParam(value = FIELD_NAME_REPORT_ID) int reportId, @RequestParam(value = FIELD_NAME_TAG) String tag) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.getAvailableFilterData(catId, packageId, reportId, tag));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @GetMapping("/get-AvailableMapData")
+    public ResponseEntity<String> getAvailableMapData(@RequestParam(value = FIELD_NAME_PACKAGE_ID) int packageId, @RequestParam(value = FIELD_NAME_REPORT_ID) int reportId,@RequestParam(value = FIELD_NAME_CAT_ID) int catId) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.getAvailableMapData(packageId, reportId, catId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("/delete-masterFilter")
+    public ResponseEntity<String> deleteMasterFilter(@RequestParam(value = FIELD_NAME_ID) int id,HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.deleteMasterFilter(id, userId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("/delete-masterMapping")
+    public ResponseEntity<String> deleteMasterMapping(@RequestParam(value = FIELD_NAME_ID) int id,HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.deleteMasterMapping(id, userId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("/get-dateAttributionData")
+    public ResponseEntity<String> getDateAttributionData(@RequestBody EboFilterMapViewDTO filter) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.getDateAttributionData(filter));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("/update-dateAttributionData")
+    public ResponseEntity<String> updateDateAttributionData(@RequestBody EboFilterMapViewDTO filter, @RequestParam(value = FIELD_NAME_VALUE) String value,HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.updateDateAttributionData(filter, value, userId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+    }
+
+    @PostMapping("/copy-sourceTargetReportData")
+    public ResponseEntity<String> copyReportFilterSourceToTarget(@RequestBody EboGlobalCopySourceTargetReport copyData,HttpServletRequest request) {
+        if (EboGlobalMappingConstants.EBO_MAPPING_CONFIGURATION_KEY.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EboGlobalMappingConstants.ITEM_KEY_FOR_EBO_MAPPING))) {
+            int userId = EboGmUtil.getTrUserId(request);
+            return ResponseEntity.ok().body(eboGlobalMappingMapService.copyReportFilterSourceToTarget(copyData, userId));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ERROR_MSG_FOR_EBO_MAPPING_ITEM_KEY);
+
+    }
+}
+
+
+
+
+
+
+@Repository
+public class EboGlobalMappingMapAndFilterValueRepository {
+
+    public static final Logger LOGGER = LoggerFactory.getLogger(EboGlobalMappingMapAndFilterValueRepository.class);
+
+    public final NamedParameterJdbcTemplate parameterJdbcTemplate;
+
+    public EboGlobalMappingMapAndFilterValueRepository(NamedParameterJdbcTemplate parameterJdbcTemplate) {
+        this.parameterJdbcTemplate = parameterJdbcTemplate;
+    }
+
+
+    public List<String> getMappedValues(int packageId, int reportId, int catId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            return parameterJdbcTemplate.queryForList(GET_MAPPED_VALUE_QUERY, sqlParameters, String.class);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getMappedValues",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public String getAllFilterAndMappingCategories(int packageId, int reportId, int catId) {
+        try {
+            StringBuilder filterSql = new StringBuilder(GET_FILTER_MAPPING_CATEGORIES_FILTER_QUERY);
+            StringBuilder mappingSql = new StringBuilder(GET_FILTER_MAPPING_CATEGORIES_MAPPING_QUERY);
+            JSONObject result = new JSONObject();
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            if (catId != 0) {
+                sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+                filterSql.append(AND_CAT_ID_CONDITION);
+                mappingSql.append(AND_CAT_ID_CONDITION);
+            }
+            filterSql.append(ORDER_BY_SEQUENCE_CONDITION);
+            mappingSql.append(ORDER_BY_SEQUENCE_CONDITION);
+            List<Map<String, Object>> filterRows = parameterJdbcTemplate.queryForList(filterSql.toString(), sqlParameters);
+            List<Map<String, Object>> mappingRows = parameterJdbcTemplate.queryForList(mappingSql.toString(), sqlParameters);
+
+            JSONArray filterJsonArray = new JSONArray();
+            JSONArray mappingJsonArray = new JSONArray();
+            for (Map<String, Object> filter : filterRows) {
+                JSONObject obj = new JSONObject(filter);
+                filterJsonArray.put(obj);
+            }
+            for (Map<String, Object> mapping : mappingRows) {
+                JSONObject obj = new JSONObject(mapping);
+                mappingJsonArray.put(obj);
+            }
+            result.put(FIELD_NAME_FILTERS, filterJsonArray);
+            result.put(FIELD_NAME_MAPPINGS, mappingJsonArray);
+            return result.toString();
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllFilterAndMappingCategories",e);
+        }
+        return null;
+    }
+
+
+    public Integer saveFilterValue(EboGlobalMappingFilterValue filterValue, int userId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            Integer mfId = getMasterFilterId(filterValue.getPackageId(), filterValue.getReportId(), filterValue.getCatId(), filterValue.getTag(), FIELD_NAME_FILTER);
+            if (mfId == 0) return 0;
+            sqlParameters.addValue(FIELD_NAME_MF_ID, mfId);
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, filterValue.getCatId());
+            sqlParameters.addValue(FIELD_NAME_CATEGORY_NAME, filterValue.getCategoryName());
+            sqlParameters.addValue(FIELD_NAME_FILTER_VALUE, filterValue.getFilterValue());
+            sqlParameters.addValue(FIELD_NAME_TAG, filterValue.getTag());
+            sqlParameters.addValue(FIELD_NAME_CREATED_BY_USER_ID, userId);
+            sqlParameters.addValue(FIELD_NAME_MODIFIED_BY_USER_ID, userId);
+            return parameterJdbcTemplate.update(INSERT_FILTER_VALUE_QUERY, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in saveFilterValue",e);
+        }
+        return 0;
+    }
+
+    public Integer saveMapValue(EboGlobalMappingMapValue mapValue, int userId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            Integer mmId = getMasterFilterId(mapValue.getPackageId(), mapValue.getReportId(), mapValue.getCatId(), null, FIELD_NAME_MAPPINGS);
+            if (mmId == 0) return 0;
+            sqlParameters.addValue(FIELD_NAME_MM_ID, mmId);
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, mapValue.getCatId());
+            sqlParameters.addValue(FIELD_NAME_CATEGORY_NAME, mapValue.getCategoryName());
+            sqlParameters.addValue(FIELD_NAME_MAP_VALUE, mapValue.getMapValue());
+            sqlParameters.addValue(FIELD_NAME_MAP_VALUE_CODE1, mapValue.getMapValueCode1());
+            sqlParameters.addValue(FIELD_NAME_MAP_VALUE_CODE2, mapValue.getMapValueCode2());
+            sqlParameters.addValue(FIELD_NAME_CREATED_BY_USER_ID, userId);
+            sqlParameters.addValue(FIELD_NAME_MODIFIED_BY_USER_ID, userId);
+            return parameterJdbcTemplate.update(INSERT_MAP_VALUE_QUERY, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in saveMapValue",e);
+        }
+        return 0;
+    }
+
+    public Integer getMasterFilterId(Integer packageId, Integer reportId, Integer catId, String tag, String type) {
+        try {
+            StringBuilder sql = new StringBuilder(GET_MASTER_FILTER_ID_QUERY);
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            if (tag == null) {
+                sql.append(ADD_WITHOUT_TAG_IN_QUERY);
+            } else {
+                sqlParameters.addValue(FIELD_NAME_TAG, tag);
+                sql.append(ADD_WITH_TAG_IN_QUERY);
+            }
+            sqlParameters.addValue(FIELD_NAME_FILTER, type);
+            return type.equals(FIELD_NAME_FILTER) ? parameterJdbcTemplate.queryForObject(sql.toString(), sqlParameters, Integer.class) : parameterJdbcTemplate.queryForObject(GET_MASTER_MAPPING_ID_QUERY, sqlParameters, Integer.class);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getMasterFilterId",e);
+        }
+        return 0;
+    }
+
+
+    public JSONObject getMappedValuesForCopyData(CopyDataFilterMapDTO filterMapDTO) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            StringBuilder query = new StringBuilder();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, filterMapDTO.getPackageId());
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, filterMapDTO.getReportId());
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, filterMapDTO.getCatId());
+            if (!filterMapDTO.getType().equals(FIELD_NAME_FILTER)) {
+                query.append(GET_MAPPED_VALUE_COPY_DATA_QUERY);
+            } else {
+                sqlParameters.addValue(FIELD_NAME_TAG, filterMapDTO.getTag());
+                query.append(GET_FILTER_VALUE_COPY_DATA_QUERY);
+                if (filterMapDTO.getTag() == null || filterMapDTO.getTag().isEmpty()) {
+                    query.append(ADD_WITHOUT_TAG_IN_QUERY);
+                } else {
+                    query.append(ADD_WITH_TAG_IN_QUERY);
+                }
+            }
+            List<Map<String, Object>> rows = parameterJdbcTemplate.queryForList(query.toString(), sqlParameters);
+            JSONObject jsonObject = new JSONObject();
+            JSONArray jsonArray = new JSONArray();
+            for (Map<String, Object> row : rows) {
+                JSONObject obj = new JSONObject(row);
+                jsonArray.put(obj);
+            }
+            return jsonObject.put(FIELD_NAME_COPY_DATA, jsonArray);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getMappedValuesForCopyData",e);
+        }
+        return null;
+
+    }
+
+    public Integer saveMasterFilter(EboGlobalMappingMasterFilter masterFilter) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, masterFilter.getPackageId());
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, masterFilter.getReportId());
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, masterFilter.getCatId());
+            sqlParameters.addValue(FIELD_NAME_CATEGORY_NAME, masterFilter.getCategoryName());
+            sqlParameters.addValue(FIELD_NAME_TAG, masterFilter.getTag());
+            sqlParameters.addValue(FIELD_NAME_MANDATORY, masterFilter.getMandatory());
+            sqlParameters.addValue(FIELD_NAME_SEQUENCE_NO, masterFilter.getSequenceNo());
+            sqlParameters.addValue(FIELD_NAME_SELECTION_TYPE, masterFilter.getSelection_Type());
+            return parameterJdbcTemplate.update(INSERT_MASTER_FILTER_QUERY, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in saveMasterFilter",e);
+        }
+        return 0;
+    }
+
+    public Integer saveMasterMapping(EboGlobalMappingMasterMapping masterMapping) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, masterMapping.getPackageId());
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, masterMapping.getReportId());
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, masterMapping.getCatId());
+            sqlParameters.addValue(FIELD_NAME_CATEGORY_NAME, masterMapping.getCategoryName());
+            sqlParameters.addValue(FIELD_NAME_MANDATORY, masterMapping.getMandatory());
+            sqlParameters.addValue(FIELD_NAME_SELECTION_TYPE, masterMapping.getSelection_Type());
+            sqlParameters.addValue(FIELD_NAME_SEQUENCE_NO, masterMapping.getSequenceNo());
+            return parameterJdbcTemplate.update(INSERT_MASTER_MAPPING_QUERY, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in saveMasterMapping",e);
+        }
+        return 0;
+    }
+
+    public List<Integer> getCatIdListForMapping(int packageId, int reportId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            return parameterJdbcTemplate.queryForList(GET_MASTER_MAPPING_CAT_ID_QUERY, sqlParameters, Integer.class);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getCatIdListForMapping",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public String getCatNameByCatId(Integer catId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            return parameterJdbcTemplate.queryForObject(GET_CATEGORY_NAME_BY_CAT_ID_QUERY, sqlParameters, String.class);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getCatNameByCatId",e);
+        }
+        return "";
+    }
+
+    public List<EboGlobalMappingMasterFilter> getMasterFilterList(int packageId, int reportId, String tag) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            if (tag == null || tag.isEmpty()) {
+                return parameterJdbcTemplate.query(GET_FILTER_MAP_OBJECT_WITHOUT_TAG_QUERY, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingMasterFilter.class));
+            }
+            sqlParameters.addValue(FIELD_NAME_TAG, tag);
+            return parameterJdbcTemplate.query(GET_FILTER_MAP_OBJECT_WITH_TAG_QUERY, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingMasterFilter.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getMasterFilterList",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public EboGlobalMappingMasterFilter getMasterFilterById(int id) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_ID, id);
+            return parameterJdbcTemplate.queryForObject(GET_MASTER_FILTER_BY_ID, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingMasterFilter.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getMasterFilterById",e);
+        }
+        return null;
+    }
+
+    public EboGlobalMappingMasterMapping getMasterMappingById(int id) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_ID, id);
+            return parameterJdbcTemplate.queryForObject(GET_MASTER_MAPPING_BY_ID, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingMasterMapping.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getMasterMappingById",e);
+        }
+        return null;
+    }
+
+    public JSONObject getAllFilterValuesForView(int packageId, int reportId) {
+        List<EboFilterMapViewDTO> distinctCatIdObjectFilters = getAllDistinctCatIdView(packageId, reportId, FIELD_NAME_FILTER);
+        JSONObject jsonObject = new JSONObject();
+        JSONArray viewDataArray = new JSONArray();
+
+        for (EboFilterMapViewDTO dto : distinctCatIdObjectFilters) {
+            String dateQuery = getQueryByCatId(dto.getCatId());
+            dto.setQuery(dateQuery);
+
+            List<String> listOfFilterValues = getAllFilterValuesForReportView(dto.getPackageId(), dto.getReportId(), dto.getCatId(), dto.getTag());
+            if(dto.getSelection_Type() == 2) {
+                List<JSONObject> data = getFilterAvailableDataByQuery(dateQuery, listOfFilterValues, getSaveField(getQueryIdByCatId(dto.getCatId())));
+
+                if (!data.isEmpty()) {
+                    JSONObject categoryData = new JSONObject();
+                    categoryData.put(FIELD_VIEW_DATA, data);
+                    categoryData.put(FIELD_NAME_CATEGORY_NAME, dto.getTag() != null ? dto.getCategoryName() + " " + dto.getTag() : dto.getCategoryName());
+                    categoryData.put(FIELD_UI_FIELDS, getUiFieldsForView(dto.getQueryId()));
+                    viewDataArray.put(categoryData);
+                }
+            }else{
+                JSONObject categoryData = new JSONObject();
+                categoryData.put(FIELD_VIEW_DATA, Arrays.asList(new JSONObject().put(dto.getCategoryName(),listOfFilterValues.get(0))));
+                categoryData.put(FIELD_NAME_CATEGORY_NAME, dto.getTag() != null ? dto.getCategoryName() + " " + dto.getTag() : dto.getCategoryName());
+                categoryData.put(FIELD_UI_FIELDS, Arrays.asList(new JSONObject().put(FIELD_NAME_UI_FIELD_VALUE,dto.getCategoryName()).put(FIELD_NAME_DISPLAY_NAME,dto.getCategoryName())));
+                viewDataArray.put(categoryData);
+            }
+        }
+        jsonObject.put(FIELD_CATEGORIES, viewDataArray);
+        return jsonObject;
+    }
+
+    public List<EboGlobalMappingCategoryUIFields> getUiFieldsForView(int queryId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_QUERY_ID, queryId);
+            return parameterJdbcTemplate.query(GET_FIELDS_OF_CATEGORY_QUERY_FOR_VIEW, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingCategoryUIFields.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getFieldsOfCategory",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public Integer getQueryIdByCatId(int catId) {
+        MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+        sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+        return parameterJdbcTemplate.queryForObject(GET_QUERY_ID_BY_CAT_ID, sqlParameters, Integer.class);
+    }
+
+    public String getAllFilterMappingValues(int packageId, int reportId) {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put(FIELD_FILTERS, getAllFilterValuesForView(packageId, reportId));
+        jsonObject.put(FIELD_MAPPINGS, getAllMappingValuesForView(packageId, reportId));
+        return jsonObject.toString();
+    }
+
+    public JSONObject getAllMappingValuesForView(int packageId, int reportId) {
+        try {
+            JSONArray viewMapArray = new JSONArray();
+            List<EboFilterMapViewDTO> distinctCatIdObjectMapping = getAllDistinctCatIdView(packageId, reportId, FIELD_NAME_MAPPING);
+            JSONObject jsonObject = new JSONObject();
+            for (EboFilterMapViewDTO dto : distinctCatIdObjectMapping) {
+                dto.setQuery(getQueryByCatId(dto.getCatId()));
+                List<EboGlobalMappingMapValue> listOfMapValues = getAllMapValuesForReportView(dto.getPackageId(), dto.getReportId(), dto.getCatId());
+                String dateQuery = getQueryByCatId(dto.getCatId());
+                Integer queryId = getQueryIdByCatId(dto.getCatId());
+                String saveField = getSaveField(queryId);
+                List<JSONObject> mapData = getMapAvailableDataByQuery(dateQuery, listOfMapValues, saveField);
+                if (!mapData.isEmpty()) {
+                    JSONObject categoryData = new JSONObject();
+                    categoryData.put(FIELD_VIEW_DATA, mapData);
+                    categoryData.put(FIELD_NAME_CATEGORY_NAME, dto.getCategoryName());
+                    categoryData.put(FIELD_UI_FIELDS, getUiFieldsForView(dto.getQueryId()));
+                    viewMapArray.put(categoryData);
+                }
+                jsonObject.put(FIELD_CATEGORIES, viewMapArray);
+            }
+            return jsonObject;
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllMappingValuesForView",e);
+        }
+        return new JSONObject();
+    }
+
+    public String getSaveField(Integer queryId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_QUERY_ID, queryId);
+            return parameterJdbcTemplate.queryForObject(GET_SAVE_VALUE_FOR_QUERY, sqlParameters, String.class);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getSaveField",e);
+        }
+        return "";
+    }
+
+    public List<EboGlobalMappingMapValue> getAllMapValuesForReportView(int packageId, int reportId, int catId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            return parameterJdbcTemplate.query(GET_MAP_VALUE_REPORT_VIEW, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingMapValue.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllMapValuesForReportView",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public List<String> getAllFilterValuesForReportView(int packageId, int reportId, int catId, String tag) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            StringBuilder query = new StringBuilder(GET_FILTER_VALUE_REPORT_VIEW);
+            if (tag != null && !tag.isEmpty() && !tag.equals(FIELD_VALUE_NULL)) {
+                sqlParameters.addValue(FIELD_NAME_TAG, tag);
+                query.append(ADD_WITH_TAG_IN_QUERY);
+            } else {
+                query.append(ADD_WITHOUT_TAG_IN_QUERY);
+            }
+            return parameterJdbcTemplate.queryForList(query.toString(), sqlParameters, String.class);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllFilterValuesForReportView",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public String getQueryByCatId(int catId) {
+        MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+        sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+        return SqlTranslator.isDbMySql() ? parameterJdbcTemplate.queryForObject(GET_MYSQL_QUERY_BY_CAT_ID, sqlParameters, String.class) : parameterJdbcTemplate.queryForObject(GET_MSSQL_QUERY_BY_CAT_ID, sqlParameters, String.class);
+    }
+
+    public List<EboFilterMapViewDTO> getAllDistinctCatIdView(int packageId, int reportId, String type) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            return FIELD_NAME_FILTER.equalsIgnoreCase(type) ? parameterJdbcTemplate.query(GET_DISTINCT_CAT_ID_FILTER_REPORT_VIEW_QUERY, sqlParameters, new BeanPropertyRowMapper<>(EboFilterMapViewDTO.class)) : parameterJdbcTemplate.query(GET_DISTINCT_CAT_ID_MAPPING_REPORT_VIEW_QUERY, sqlParameters, new BeanPropertyRowMapper<>(EboFilterMapViewDTO.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getAllDistinctCatIdView",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public List<JSONObject> getFilterAvailableDataByQuery(String query, List<String> listOfFilterValues, String saveField) {
+        try {
+            query = EncryptionUtil.decrypt(query);
+            if(query != null) {
+                List<Map<String, Object>> rows = parameterJdbcTemplate.queryForList(query, new MapSqlParameterSource());
+                JSONArray jsonArray = new JSONArray();
+                for (Map<String, Object> row : rows) {
+                    JSONObject obj = new JSONObject(row);
+                    jsonArray.put(obj);
+                }
+
+                List<JSONObject> jsonObjectList = new ArrayList<>();
+                for (int i = 0; i < jsonArray.length(); i++) {
+                    jsonObjectList.add(jsonArray.getJSONObject(i));
+                }
+
+                return jsonObjectList.stream()
+                        .filter(jsonObject -> listOfFilterValues.contains(
+                                jsonObject.get(saveField).toString()))
+                        .collect(Collectors.toList());
+            }
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getFilterAvailableDataByQuery",e);
+        }
+        return new ArrayList<>();
+    }
+
+
+    public List<JSONObject> getAvailableFilterData(int catId, int packageId, int reportId, String tag) {
+        List<String> listOfFilterValues = getAllFilterValuesForReportView(packageId, reportId, catId, tag);
+        Integer queryId = getQueryIdByCatId(catId);
+        String saveField = getSaveField(queryId);
+        String query = getQueryByCatId(catId);
+        return getFilterAvailableDataByQuery(query, listOfFilterValues, saveField);
+    }
+
+    public Integer updateTag(int catId, String oldTag, String tag) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            sqlParameters.addValue(FIELD_NAME_TAG, tag);
+            sqlParameters.addValue(FIELD_NAME_OLD_TAG, oldTag);
+            return parameterJdbcTemplate.update(UPDATE_TAG_MASTER_FILTER_QUERY, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in updateTag",e);
+        }
+        return -1;
+    }
+
+    public Integer updateTagForFilterValue(int catId, String oldTag, String tag) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            sqlParameters.addValue(FIELD_NAME_TAG, tag);
+            sqlParameters.addValue(FIELD_NAME_OLD_TAG, oldTag);
+            return parameterJdbcTemplate.update(UPDATE_TAG_FILTER_VALUES_QUERY, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in updateTagForFilterValue",e);
+        }
+        return -1;
+    }
+
+    public EboGlobalMappingMasterFilter getMasterFilterByCatIdAndTag(int packageId,int reportId,int catId, String tag) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            sqlParameters.addValue(FIELD_NAME_TAG, tag);
+            return parameterJdbcTemplate.queryForObject(GET_MASTER_FILTER_BY_CAT_ID_AND_TAG, sqlParameters, new BeanPropertyRowMapper<>(EboGlobalMappingMasterFilter.class));
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getMasterFilterByCatIdAndTag",e);
+        }
+        return null;
+    }
+
+
+    public int removeFilterIdByUser(int id, List<String> rmFilterValue) {
+        try {
+            StringBuilder sql = new StringBuilder(DELETE_FILTER_VALUE_REMOVED_BY_USER);
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_ID, id);
+            sql.append("(").append(String.join(",", rmFilterValue.stream().map(s -> "'" + s + "'").toArray(String[]::new))).append(")");
+
+            return parameterJdbcTemplate.update(sql.toString(), sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in removeFilterIdByUser",e);
+        }
+        return -2;
+    }
+
+    public void deleteFilterValuesByDeletingMasterFilter(int id) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_ID, id);
+            parameterJdbcTemplate.update(DELETE_FILTER_VALUE_BY_DELETING_MASTER_FILTER, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in deleteFilterValuesByDeletingMasterFilter",e);
+        }
+    }
+
+
+    public Integer deleteMasterFilter(int id) {
+        try {
+            deleteFilterValuesByDeletingMasterFilter(id);
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_ID, id);
+            return parameterJdbcTemplate.update(DELETE_MASTER_FILTER_QUERY, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in deleteMasterFilter",e);
+        }
+        return -1;
+    }
+
+    public List<JSONObject> getAvailableMapData(int packageId, int reportId, int catId) {
+
+        List<EboGlobalMappingMapValue> listOfMapValue = getAllMapValuesForReportView(packageId, reportId, catId);
+        Integer queryId = getQueryIdByCatId(catId);
+        String saveField = getSaveField(queryId);
+        String query = getQueryByCatId(catId);
+        return getMapAvailableDataByQuery(query, listOfMapValue, saveField);
+    }
+
+    public List<JSONObject> getMapAvailableDataByQuery(String query, List<EboGlobalMappingMapValue> listOfMapValue, String saveField) {
+        try {
+            query = EncryptionUtil.decrypt(query);
+            if(query != null) {
+                List<Map<String, Object>> rows = parameterJdbcTemplate.queryForList(query, new MapSqlParameterSource());
+                JSONArray jsonArray = new JSONArray();
+                for (Map<String, Object> row : rows) {
+                    JSONObject obj = new JSONObject(row);
+                    jsonArray.put(obj);
+                }
+
+                List<JSONObject> jsonObjectList = new ArrayList<>();
+                for (int i = 0; i < jsonArray.length(); i++) {
+                    jsonObjectList.add(jsonArray.getJSONObject(i));
+                }
+
+                return jsonObjectList.stream()
+                        .map(obj1 -> {
+                            String name1 = obj1.get(saveField).toString();
+                            listOfMapValue.stream()
+                                    .filter(obj2 -> name1.equals(obj2.getMapValue()))
+                                    .findFirst()
+                                    .ifPresent(obj2 -> {
+                                        obj1.put(FIELD_NAME_MAP_VALUE_CODE1, obj2.getMapValueCode1());
+                                        obj1.put(FIELD_NAME_MAP_VALUE_CODE2, obj2.getMapValueCode2());
+                                    });
+                            return obj1;
+                        })
+                        .filter(obj -> obj.has(FIELD_NAME_MAP_VALUE_CODE1) || obj.has(FIELD_NAME_MAP_VALUE_CODE2))
+                        .collect(Collectors.toList());
+            }
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in getMapAvailableDataByQuery",e);
+        }
+        return new ArrayList<>();
+    }
+
+    public Integer updateMapValue(String mapValue, String mapValueCode1, String mapValueCode2, int userId, int mmId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_MAP_VALUE, mapValue);
+            sqlParameters.addValue(FIELD_NAME_MAP_VALUE_CODE1, mapValueCode1);
+            sqlParameters.addValue(FIELD_NAME_MAP_VALUE_CODE2, mapValueCode2);
+            sqlParameters.addValue(FIELD_NAME_MODIFIED_BY_USER_ID, userId);
+            sqlParameters.addValue(FIELD_NAME_MM_ID, mmId);
+            return parameterJdbcTemplate.update(UPDATE_MAP_VALUE_QUERY, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in updateMapValue",e);
+        }
+        return 0;
+    }
+
+    public Integer deleteMasterMapping(int id) {
+        try {
+            deleteMapValuesByDeletingMasterMapping(id);
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_ID, id);
+            return parameterJdbcTemplate.update(DELETE_MASTER_MAPPING_QUERY, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in deleteMasterMapping",e);
+        }
+        return -1;
+    }
+
+    public void deleteMapValuesByDeletingMasterMapping(int id) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_ID, id);
+            parameterJdbcTemplate.update(DELETE_MAP_VALUE_BY_DELETING_MASTER_MAPPING, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in deleteMapValuesByDeletingMasterMapping",e);
+        }
+    }
+
+    public String getDateAttributionData(EboFilterMapViewDTO filter) {
+            List<String> s = getAllFilterValuesForReportView(filter.getPackageId(), filter.getReportId(), filter.getCatId(), filter.getTag());
+            if (s.isEmpty()) return "";
+            else return s.get(0);
+    }
+
+    public String updateDateAttributionData(EboFilterMapViewDTO filter, String value, int userId) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_FILTER_VALUE, value);
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, filter.getPackageId());
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, filter.getReportId());
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, filter.getCatId());
+
+            StringBuilder query = new StringBuilder(SqlTranslator.isDbMySql() ? MYSQL_UPDATE_FILTER_VALUE_DATE_ATTRIBUTION : MSSQL_UPDATE_FILTER_VALUE_DATE_ATTRIBUTION);
+            if (filter.getTag() != null && !filter.getTag().isEmpty()) {
+                sqlParameters.addValue(FIELD_NAME_TAG, filter.getTag());
+                query.append(ADD_WITH_TAG_IN_QUERY);
+            } else {
+                query.append(ADD_WITHOUT_TAG_IN_QUERY);
+            }
+            int k = parameterJdbcTemplate.update(query.toString(), sqlParameters);
+            if (k > 0)
+                makeEntryInEboGmLogs(userId, filter.getPackageId(), filter.getReportId(), UPDATED_DATA_ATTRIBUTION, filter.getCatId(), filter.getTag(), value);
+            if (k > 0) return SUCCESS_MSG;
+            else return FAILURE_MSG;
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in updateDateAttributionData",e);
+        }
+        return FAILURE_MSG;
+    }
+
+    public String copyMasterFilterData(EboGlobalCopySourceTargetReport copyData, int userId) {
+        try {
+            for (int id : copyData.getCopyId()) {
+                EboGlobalMappingMasterFilter masterFilter = getMasterFilterById(id);
+                EboGlobalMappingMasterFilter targetFilter = new EboGlobalMappingMasterFilter(copyData.getTargetPackageId(), copyData.getTargetReportId(), masterFilter.getCatId(), masterFilter.getCategoryName(), masterFilter.getTag(),masterFilter.getSelection_Type());
+                Integer check = saveMasterFilter(targetFilter);
+                List<String> values = getAllFilterValuesForReportView(copyData.getSourcePackageId(), copyData.getSourceReportId(), masterFilter.getCatId(), masterFilter.getTag());
+                if (check > 0) {
+                    EboGlobalMappingFilterValue filterValue = new EboGlobalMappingFilterValue();
+                    filterValue.setCatId(targetFilter.getCatId());
+                    filterValue.setPackageId(copyData.getTargetPackageId());
+                    filterValue.setReportId(copyData.getTargetReportId());
+                    filterValue.setCatId(targetFilter.getCatId());
+                    filterValue.setTag(targetFilter.getTag());
+                    filterValue.setCategoryName(targetFilter.getCategoryName());
+                    for (String value : values) {
+                        filterValue.setFilterValue(value);
+                        saveFilterValue(filterValue, userId);
+                    }
+                }
+                makeEntryInEboGmLogs(userId, copyData.getTargetPackageId(), copyData.getTargetReportId(), SAVE_FILTER_VALUE_USING_COPY_FROM_REPORT, targetFilter.getCatId(), targetFilter.getTag(), values.toString());
+
+            }
+            return SUCCESS_MSG;
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in copyMasterFilterData",e);
+        }
+        return ERROR_COPY_MSG;
+    }
+
+    public String overrideFilterData(EboGlobalCopySourceTargetReport copyData, int userId) {
+        try {
+            for (int id : copyData.getOverrideId()) {
+                EboGlobalMappingMasterFilter masterFilter = getMasterFilterById(id);
+                Integer targetMfId = getMasterFilterId(copyData.getTargetPackageId(), copyData.getTargetReportId(), masterFilter.getCatId(), masterFilter.getTag(), FIELD_NAME_FILTER);
+                deleteFilterValuesByDeletingMasterFilter(targetMfId);
+                EboGlobalMappingFilterValue filterValue = new EboGlobalMappingFilterValue();
+                filterValue.setPackageId(copyData.getTargetPackageId());
+                filterValue.setReportId(copyData.getTargetReportId());
+                filterValue.setCatId(masterFilter.getCatId());
+                filterValue.setCategoryName(masterFilter.getCategoryName());
+                filterValue.setTag(masterFilter.getTag());
+
+                List<String> values = getAllFilterValuesForReportView(copyData.getSourcePackageId(), copyData.getSourceReportId(), masterFilter.getCatId(), masterFilter.getTag());
+                for (String value : values) {
+                    filterValue.setFilterValue(value);
+                    saveFilterValue(filterValue, userId);
+                }
+                makeEntryInEboGmLogs(userId, copyData.getTargetPackageId(), copyData.getTargetReportId(), OVERRIDE_FILTER_VALUE_USING_COPY_FROM_REPORT, masterFilter.getCatId(), masterFilter.getTag(), values.toString());
+            }
+            return SUCCESS_MSG;
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in overrideFilterData",e);
+        }
+        return ERROR_OVERRIDE_MSG;
+    }
+
+    public void makeEntryInEboGmLogs(int userId, int packageId, int reportId, String logType, int catId, String tag, String catValues) {
+        try {
+            MapSqlParameterSource sqlParameters = new MapSqlParameterSource();
+            sqlParameters.addValue(FIELD_NAME_UID, userId);
+            sqlParameters.addValue(FIELD_NAME_PACKAGE_ID, packageId);
+            sqlParameters.addValue(FIELD_NAME_REPORT_ID, reportId);
+            sqlParameters.addValue(FIELD_NAME_lOG_TYPE, logType);
+            sqlParameters.addValue(FIELD_NAME_CAT_ID, catId);
+            sqlParameters.addValue(FIELD_NAME_TAG, tag);
+            sqlParameters.addValue(FIELD_NAME_CAT_VALUES, catValues);
+            parameterJdbcTemplate.update(MAKE_ENTRY_IN_GM_LOGS, sqlParameters);
+        } catch (DataAccessException e) {
+            LOGGER.error("Error in makeEntryInEboGmLogs",e);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@Service
+public class EboGlobalMappingMapAndFilterValueService {
+
+
+    private final EboGlobalMappingMapAndFilterValueRepository globalMappingMapValueRepository;
+
+    public EboGlobalMappingMapAndFilterValueService(EboGlobalMappingMapAndFilterValueRepository globalMappingMapValueRepository) {
+        this.globalMappingMapValueRepository = globalMappingMapValueRepository;
+    }
+
+
+    private List<EboGlobalMappingFilterValue> getUpdatedFilterValues(List<EboGlobalMappingFilterValue> filterValues, List<String> availableFilterValues) {
+        List<EboGlobalMappingFilterValue> ls = new ArrayList<>();
+        for(EboGlobalMappingFilterValue filterValue : filterValues) {
+            if(!availableFilterValues.contains(filterValue.getFilterValue())) {
+                ls.add(filterValue);
+            }
+        }
+        return ls;
+    }
+
+
+    private List<String> getRemovedFilterValues(List<String> filterValues, List<String> availableFilterValues) {
+        List<String> removedFilterValues = new ArrayList<>();
+        for(String val : availableFilterValues ) {
+            if(!filterValues.contains(val)) {
+                removedFilterValues.add(val);
+            }
+        }
+        return removedFilterValues;
+    }
+
+    public String saveFilterValue(List<EboGlobalMappingFilterValue> filterValues, int userId) {
+        Integer rowCount = 0;
+        List<String> tempFilterValues = filterValues.stream().map(EboGlobalMappingFilterValue::getFilterValue).collect(Collectors.toList());
+        Integer mfId = globalMappingMapValueRepository.getMasterFilterId(filterValues.get(0).getPackageId(), filterValues.get(0).getReportId(),filterValues.get(0).getCatId(),filterValues.get(0).getTag(), FIELD_NAME_FILTER);
+        List<String> availableFilterValues = globalMappingMapValueRepository.getAllFilterValuesForReportView(filterValues.get(0).getPackageId(), filterValues.get(0).getReportId(),filterValues.get(0).getCatId(),filterValues.get(0).getTag());
+        List<EboGlobalMappingFilterValue> updated = getUpdatedFilterValues(filterValues,availableFilterValues);
+        List<String> removedValues  = getRemovedFilterValues(tempFilterValues,availableFilterValues);
+        if(mfId==0) {
+            return INVALID_DATA_MSG;
+        }
+
+        if(!removedValues.isEmpty()) {
+            int rmCount = globalMappingMapValueRepository.removeFilterIdByUser(mfId, removedValues);
+            if (rmCount != -2) {
+                globalMappingMapValueRepository.makeEntryInEboGmLogs(userId, filterValues.get(0).getPackageId(), filterValues.get(0).getReportId(), REMOVE_FILTER_VALUE, filterValues.get(0).getCatId(), filterValues.get(0).getTag(), removedValues.toString());
+            }
+        }
+        if(filterValues.get(0).getFilterValue()==null && filterValues.size()==1) {
+            return SUCCESS_MSG;
+        }
+        List<String> savedFilterValues = new ArrayList<>();
+        for (EboGlobalMappingFilterValue filter : updated) {
+            rowCount += globalMappingMapValueRepository.saveFilterValue(filter,userId);
+            savedFilterValues.add(filter.getFilterValue());
+        }
+        if(!savedFilterValues.isEmpty()) {
+            globalMappingMapValueRepository.makeEntryInEboGmLogs(userId, filterValues.get(0).getPackageId(), filterValues.get(0).getReportId(), SAVE_FILTER_VALUE, filterValues.get(0).getCatId(), filterValues.get(0).getTag(), savedFilterValues.toString());
+        }
+        if (rowCount == updated.size()) {
+            return SUCCESS_MSG;
+        }
+        return rowCount > 0 ? PARTIALLY_SUCCESS_MSG : FAILURE_MSG;
+    }
+
+
+
+    public String saveMapValue(List<EboGlobalMappingMapValue> mapValues,int userId) {
+        Integer rowCount = 0;
+        Integer mmId = globalMappingMapValueRepository.getMasterFilterId(mapValues.get(0).getPackageId(),mapValues.get(0).getReportId(),mapValues.get(0).getCatId(), null, FIELD_NAME_MAPPINGS);
+        List<String> mp = globalMappingMapValueRepository.getMappedValues(mapValues.get(0).getPackageId(),mapValues.get(0).getReportId(),mapValues.get(0).getCatId());
+        List<String> savedMapValues = new ArrayList<>();
+        for (EboGlobalMappingMapValue map : mapValues) {
+            if(mp.contains(map.getMapValue())) {
+                rowCount += globalMappingMapValueRepository.updateMapValue(map.getMapValue(),map.getMapValueCode1(),map.getMapValueCode2(),userId,mmId);
+                savedMapValues.add(map.getMapValue());
+            }else {
+                rowCount += globalMappingMapValueRepository.saveMapValue(map, userId);
+                savedMapValues.add(map.getMapValue());
+            }
+        }
+        globalMappingMapValueRepository.makeEntryInEboGmLogs(userId, mapValues.get(0).getPackageId(), mapValues.get(0).getReportId(), SAVE_MAP_VALUE, mapValues.get(0).getCatId(), null, savedMapValues.toString());
+        if (rowCount == mapValues.size()) {
+            return SUCCESS_MSG;
+        }
+        return rowCount > 0 ? PARTIALLY_SUCCESS_MSG : FAILURE_MSG;
+    }
+
+    public String getAllFilterAndMappingCategories(int packageId, int reportId, int catId) {
+        return globalMappingMapValueRepository.getAllFilterAndMappingCategories(packageId, reportId ,catId);
+    }
+
+    public String getMappedValuesForCopyData(CopyDataFilterMapDTO filterMapDTO) {
+        return globalMappingMapValueRepository.getMappedValuesForCopyData(filterMapDTO).toString();
+    }
+
+    public String saveMasterFilter(EboGlobalMappingMasterFilter masterFilter,int userId) {
+        Integer rowCount;
+        List<EboGlobalMappingMasterFilter> masterFilterList = globalMappingMapValueRepository.getMasterFilterList(masterFilter.getPackageId(),masterFilter.getReportId(),masterFilter.getTag());
+        String tempCatName = globalMappingMapValueRepository.getCatNameByCatId(masterFilter.getCatId());
+        boolean k = masterFilter.getTag()!=null?masterFilterList.stream().filter(filter->filter.getCatId()==masterFilter.getCatId()).noneMatch(f->f.getCategoryName().equals(tempCatName) && masterFilter.getTag().equals(f.getTag())): masterFilterList.stream().filter(filter->filter.getCatId()==masterFilter.getCatId()).noneMatch(f->f.getCategoryName().equals(tempCatName));
+        if(!k){ return INVALID_DATA_MSG;}
+        rowCount = globalMappingMapValueRepository.saveMasterFilter(masterFilter);
+        if(rowCount>-1) globalMappingMapValueRepository.makeEntryInEboGmLogs(userId,masterFilter.getPackageId(),masterFilter.getReportId(),MASTER_FILTER_CREATED, masterFilter.getCatId(),masterFilter.getTag() ,null);
+        return rowCount > 0 ? SUCCESS_MSG : FAILURE_MSG;
+    }
+
+    public String saveMasterMapping(EboGlobalMappingMasterMapping masterMapping,int userId) {
+        List<Integer> catIdList = globalMappingMapValueRepository.getCatIdListForMapping(masterMapping.getPackageId(),masterMapping.getReportId());
+        if(catIdList.contains(masterMapping.getCatId())) {
+            return ERROR_DUPLICATE_MAPPING_MSG;
+        }
+        if(!masterMapping.getCategoryName().equals(globalMappingMapValueRepository.getCatNameByCatId(masterMapping.getCatId()))) {return ERROR_INVALID_CATEGORY_NAME_MSG;}
+        Integer rowCount;
+        rowCount = globalMappingMapValueRepository.saveMasterMapping(masterMapping);
+        if(rowCount>-1) globalMappingMapValueRepository.makeEntryInEboGmLogs(userId,masterMapping.getPackageId(),masterMapping.getReportId(),MASTER_FILTER_CREATED, masterMapping.getCatId(), null,null);
+        return  rowCount > 0 ? SUCCESS_MSG : FAILURE_MSG;
+
+    }
+
+    public String getAllFilterMappingValues(int packageId, int reportId) {
+        return globalMappingMapValueRepository.getAllFilterMappingValues(packageId,reportId);
+    }
+
+    public String getAvailableFilterData(int catId,int packageId,int reportId,String tag) {
+        return globalMappingMapValueRepository.getAvailableFilterData(catId,packageId,reportId,tag).toString();
+    }
+
+    public String updateTag(int packageId,int reportId,int catId, String oldTag, String tag,int userId) {
+        Integer rowCount;
+        EboGlobalMappingMasterFilter masterFilter = globalMappingMapValueRepository.getMasterFilterByCatIdAndTag(packageId,reportId, catId,oldTag);
+        rowCount = globalMappingMapValueRepository.updateTag(catId, oldTag ,tag);
+        globalMappingMapValueRepository.updateTagForFilterValue(catId, oldTag ,tag);
+        if(rowCount>-1) globalMappingMapValueRepository.makeEntryInEboGmLogs(userId,masterFilter.getPackageId(),masterFilter.getReportId(),TAG_UPDATED, masterFilter.getCatId(), masterFilter.getTag(),null);
+        return  rowCount == -1 ? FAILURE_MSG : SUCCESS_MSG ;
+    }
+
+    public String deleteMasterFilter(int id,int userId) {
+        Integer rowCount;
+        EboGlobalMappingMasterFilter masterFilter = globalMappingMapValueRepository.getMasterFilterById(id);
+        rowCount = globalMappingMapValueRepository.deleteMasterFilter(id);
+        if(rowCount>-1) globalMappingMapValueRepository.makeEntryInEboGmLogs(userId,masterFilter.getPackageId(),masterFilter.getReportId(),MASTER_FILTER_DELETED, masterFilter.getCatId(),masterFilter.getTag(), null);
+        return  rowCount == -1 ?  FAILURE_MSG : SUCCESS_MSG ;
+    }
+
+    public String getAvailableMapData(int packageId,int reportId,int catId) {
+        return globalMappingMapValueRepository.getAvailableMapData(packageId,reportId,catId).toString();
+    }
+
+
+    public String deleteMasterMapping(int id,int userId) {
+        Integer rowCount;
+        EboGlobalMappingMasterMapping masterMapping = globalMappingMapValueRepository.getMasterMappingById(id);
+        rowCount = globalMappingMapValueRepository.deleteMasterMapping(id);
+        if(rowCount>-1) globalMappingMapValueRepository.makeEntryInEboGmLogs(userId,masterMapping.getPackageId(),masterMapping.getReportId(),MASTER_MAPPING_DELETED, masterMapping.getCatId(), null,null);
+        return  rowCount == -1 ?  FAILURE_MSG : SUCCESS_MSG ;
+    }
+
+    public String getDateAttributionData(EboFilterMapViewDTO filter) {
+        return globalMappingMapValueRepository.getDateAttributionData(filter);
+    }
+
+    public String updateDateAttributionData(EboFilterMapViewDTO filter, String value, int userId) {
+        List<String> s = globalMappingMapValueRepository.getAllFilterValuesForReportView(filter.getPackageId(),filter.getReportId(), filter.getCatId(), filter.getTag());
+        if(s.isEmpty()){
+            EboGlobalMappingFilterValue dto = new EboGlobalMappingFilterValue();
+            dto.setCatId(filter.getCatId());
+            dto.setCategoryName(filter.getCategoryName());
+            dto.setTag(filter.getTag());
+            dto.setReportId(filter.getReportId());
+            dto.setPackageId(filter.getPackageId());
+            dto.setFilterValue(value);
+            int rs = globalMappingMapValueRepository.saveFilterValue(dto,userId);
+            if(rs>0) globalMappingMapValueRepository.makeEntryInEboGmLogs(userId,filter.getPackageId(),filter.getReportId(),SAVED_DATA_ATTRIBUTION,filter.getCatId(),filter.getTag(),value);
+            if(rs>0) return SUCCESS_MSG;
+            return FAILURE_MSG;
+
+        }
+        return globalMappingMapValueRepository.updateDateAttributionData(filter,value,userId);
+    }
+
+    public String copyReportFilterSourceToTarget(EboGlobalCopySourceTargetReport copyData, int userId) {
+       String copySuccess = globalMappingMapValueRepository.copyMasterFilterData(copyData,userId);
+       String overrideSuccess = globalMappingMapValueRepository.overrideFilterData(copyData,userId);
+       return copySuccess+ " / "+overrideSuccess;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
