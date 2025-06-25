@@ -165,3 +165,222 @@ class UdsCdeUtilSpec extends Specification {
         203 | "0" | "desc"      | "desc"
     }
 } 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import spock.lang.Specification
+import analytics.rcp.model.Measure
+
+class UdsCdeUtilSpec extends Specification {
+
+    def udsCdeUtil = new UdsCdeUtil()
+
+    def "getMeasureName should return correct name or empty string"() {
+        expect:
+        udsCdeUtil.getMeasureName(qid) == expected
+
+        where:
+        qid | expected
+        201 | "Cervical Cancer Screening"
+        225 | "Diabetes"
+        999 | ""
+    }
+
+    def "getSupportingFact for qid 240 including default empty return"() {
+        expect:
+        udsCdeUtil.getSupportingFact(240, ["c3": c3, "c27": c27]) == expected
+
+        where:
+        c3   | c27   | expected
+        "1"  | "0"   | ""
+        "0"  | "0"   | "Treatment Initiation Pending"
+        "0"  | "1"   | "Compliance Period Closed: No Further Action Possible"
+        "0"  | "xyz" | "Compliance Period Closed: No Further Action Possible"
+        null | null  | ""
+    }
+
+    def "getSupportingFact for qid 242 including default empty return"() {
+        expect:
+        udsCdeUtil.getSupportingFact(242, ["c3": c3, "c26": c26, "c27": c27]) == expected
+
+        where:
+        c3   | c26  | c27  | expected
+        "1"  | "0"  | "0"  | ""
+        "0"  | "0"  | "0"  | "Patient Engagement Required"
+        "0"  | "1"  | "0"  | "One More Engagement Required"
+        "0"  | "1"  | "2"  | "Compliance Period Closed: No Further Action Possible"
+        null | null | null | ""
+    }
+
+    def "getSupportingFact for unknown qid returns empty"() {
+        expect:
+        udsCdeUtil.getSupportingFact(999, ["c3": "0", "c5": "", "c6": "", "c7": ""]) == ""
+    }
+
+    def "handleChildhoodBMISupportingFacts returns VITALS_NOT_TAKEN if no match"() {
+        expect:
+        udsCdeUtil.getSupportingFact(213, ["c3": "0", "c5": "x", "c6": "", "c7": ""]) == "Vitals Not Taken"
+    }
+
+    def "handleTobaccoScreeningSupportingFacts returns FOLLOW_UP_NOT_DONE if no match"() {
+        expect:
+        udsCdeUtil.getSupportingFact(232, ["c3": "0", "c5": "", "c6": ""]) == "Follow-up Not Done"
+    }
+
+    def "handleSupportingFactsForDepressionScreening return default if no match"() {
+        expect:
+        udsCdeUtil.getSupportingFact(220, ["c3": "0", "c5": "", "c6": ""]) == "Screening not Done"
+    }
+
+    def "getDate returns empty if no match"() {
+        expect:
+        udsCdeUtil.getDate(999, "0", "", "", "", "", "") == ""
+    }
+
+    def "handleDateC3EqualsZeroForDate returns empty for unknown qid"() {
+        expect:
+        udsCdeUtil.getDate(999, "0", "", "", "", "", "") == ""
+    }
+
+    def "handleDateForChildhoodBMI returns empty if no conditions match"() {
+        expect:
+        udsCdeUtil.getDate(213, "0", null, null, null, "", "") == ""
+    }
+
+    def "handleDateForAdultBMI returns default empty when c5 & c6 & c9 unmatched"() {
+        expect:
+        udsCdeUtil.getDate(205, "0", null, null, "", "3", "") == ""
+    }
+
+    def "handleDateForTobaccoScreening returns empty if no match"() {
+        expect:
+        udsCdeUtil.getDate(232, "0", null, null, "", "", "") == ""
+    }
+
+    def "handleDateForDepressionScreening returns empty if no match"() {
+        expect:
+        udsCdeUtil.getDate(220, "0", null, null, "", "3", "") == ""
+    }
+
+    def "getDate when c3 = 0 and qid = 213 (Childhood BMI)"() {
+        expect:
+        udsCdeUtil.getDate(213, "0", c5, c6, c7, "", "") == expected
+
+        where:
+        c5   | c6   | c7   | expected
+        "x" | "y" | "z" | "Nutrition Counseling and Physical Activity Pending"
+        null | "y" | "z" | "Physical Activity Pending"
+        null | null | "z" | "Physical Activity Pending"
+        null | "y" | null | "Nutrition Counseling Pending"
+        "x" | null | null | "Nutrition Counseling and Physical Activity Done"
+        "x" | null | "z" | "Physical Activity Pending"
+        "x" | "y" | null | "Nutrition Counselling Pending"
+    }
+
+    def "getDate when c3 = 0 and qid = 205 (Adult BMI)"() {
+        expect:
+        udsCdeUtil.getDate(205, "0", c5, c6, "", c9, "") == expected
+
+        where:
+        c5   | c6   | c9   | expected
+        "x" | "y" | ""  | "Follow-up Not Done"
+        "x" | null | ""  | "Follow-up Completed"
+        null | "y" | "0" | "Vitals Taken-Normal Weight"
+        null | "y" | "1" | "Vitals Taken-Under Weight"
+        null | "y" | "2" | "Vitals Taken-Over Weight"
+    }
+
+    def "getDate when c3 = 0 and qid = 232 (Tobacco Screening)"() {
+        expect:
+        udsCdeUtil.getDate(232, "0", c5, c6, "", "", "") == expected
+
+        where:
+        c5   | c6   | expected
+        "x" | "y" | "Follow-up Not Done"
+        "x" | null | "Follow-up Completed"
+        null | "y" | "Screening Completed"
+    }
+
+    def "getDate when c3 = 0 and qid = 220 (Depression Screening)"() {
+        expect:
+        udsCdeUtil.getDate(220, "0", c5, c6, "", c9, "") == expected
+
+        where:
+        c5   | c6   | c9   | expected
+        "x" | null | ""  | "Follow-up Completed"
+        null | "x" | "0" | "Screening Completed-Negative"
+        null | "x" | "1" | "Screening Completed-Positive"
+        "x" | "x" | ""  | "Follow-up Not Done"
+        null | null | "" | ""
+    }
+
+    def "getDate when c3 = 1 and qid = 225"() {
+        expect:
+        udsCdeUtil.getDate(225, "1", "", "", "", "", c17) == expected
+
+        where:
+        c17  | expected
+        "10" | "10"
+        null | "No HbA1c Value"
+        ""   | "No HbA1c Value"
+    }
+
+    def "getComplianceStatus sets correct outcome"() {
+        given:
+        def measure = new Measure()
+
+        when:
+        udsCdeUtil.getComplianceStatus(measure, qid, c3)
+
+        then:
+        measure.outcome == expected
+
+        where:
+        qid | c3  | expected
+        225 | "1" | "NOT_ACHIEVED"
+        225 | "0" | "ACHIEVED"
+        201 | "1" | "ACHIEVED"
+        201 | "0" | "NOT_ACHIEVED"
+    }
+
+    def "determineItemName returns correct value"() {
+        expect:
+        udsCdeUtil.determineItemName(qid, c3, description) == expected
+
+        where:
+        qid | c3  | description | expected
+        225 | "1" | "desc"      | ""
+        225 | "0" | "desc"      | "desc"
+        203 | "1" | "desc"      | ""
+        203 | "0" | "desc"      | "desc"
+    }
+} 
+
