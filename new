@@ -789,3 +789,151 @@ class UdsCdeUtilSpec extends Specification {
         203 | "0" | "HIV Test"       | "HIV Test"
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import spock.lang.Specification
+import analytics.rcp.model.Measure
+
+class UdsCdeUtilSpec extends Specification {
+
+    def udsCdeUtil = new UdsCdeUtil()
+
+    def "getMeasureName should return correct name or empty string"() {
+        expect:
+        udsCdeUtil.getMeasureName(qid) == expected
+
+        where:
+        qid | expected
+        201 | "Cervical Cancer Screening"
+        225 | "Diabetes"
+        999 | ""
+    }
+
+    def "getSupportingFact for qid 240"() {
+        expect:
+        udsCdeUtil.getSupportingFact(240, ["c3": c3, "c27": c27]) == expected
+
+        where:
+        c3   | c27   | expected
+        "1"  | "0"   | ""
+        "0"  | "0"   | "Treatment Initiation Pending"
+        "0"  | "1"   | "Compliance Period Closed: No Further Action Possible"
+        "0"  | "xyz" | "Compliance Period Closed: No Further Action Possible"
+    }
+
+    def "getSupportingFact for qid 242"() {
+        expect:
+        udsCdeUtil.getSupportingFact(242, ["c3": c3, "c26": c26, "c27": c27]) == expected
+
+        where:
+        c3   | c26  | c27  | expected
+        "1"  | "0"  | "0"  | ""
+        "0"  | "0"  | "0"  | "Patient Engagement Required"
+        "0"  | "1"  | "0"  | "One More Engagement Required"
+        "0"  | "1"  | "2"  | "Compliance Period Closed: No Further Action Possible"
+    }
+
+    def "getSupportingFact when c3 = 0 for multiple qids"() {
+        expect:
+        udsCdeUtil.getSupportingFact(qid, ["c3": "0", "c5": c5, "c6": c6, "c7": c7]) == expected
+
+        where:
+        qid  | c5     | c6     | c7     | expected
+        213 | "x"    | "y"    | "z"    | "Vitals Not Taken"
+        213 | null   | "y"    | "z"    | "Nutrition Counseling Pending"
+        213 | null   | null   | "z"    | "Nutrition Counseling Done"
+        213 | null   | "y"    | null   | "Physical Activity Done"
+        205 | "x"    | null   | null   | "Vitals Not Taken"
+        205 | null   | null   | null   | "Follow-up Not Done"
+        232 | "x"    | null   | null   | "Screening Not Done"
+        201 | "x"    | null   | null   | "Screening Not Done"
+        230 | "x"    | null   | null   | "Medication not Prescribed"
+        228 | "x"    | null   | null   | "Vitals Not Taken"
+        220 | "x"    | null   | null   | "Screening not Done"
+        223 | "x"    | null   | null   | "Remission Screening Not Done"
+    }
+
+    def "getSupportingFact when c3 = 1 and qid = 225"() {
+        expect:
+        udsCdeUtil.getSupportingFact(225, ["c3": "1", "c17": c17]) == expected
+
+        where:
+        c17  | expected
+        null | "No HbA1c Ordered"
+        ""   | "No HbA1c Ordered"
+        "10" | "HbA1c Value > 9"
+        "8"  | ""
+    }
+
+    def "getDate when c3 = 0 and qid = 213 (Childhood BMI)"() {
+        expect:
+        udsCdeUtil.getDate(213, "0", c5, c6, c7, "", "") == expected
+
+        where:
+        c5   | c6   | c7   | expected
+        "x" | "y" | "z" | "Nutrition Counseling and Physical Activity Pending"
+        null | "y" | "z" | "Physical Activity Pending"
+        null | null | "z" | "Physical Activity Pending"
+        null | "y" | null | "Nutrition Counseling Pending"
+        "x" | null | null | "Nutrition Counseling and Physical Activity Done"
+        "x" | null | "z" | "Physical Activity Pending"
+        "x" | "y" | null | "Nutrition Counselling Pending"
+    }
+
+    def "getDate when c3 = 1 and qid = 225"() {
+        expect:
+        udsCdeUtil.getDate(225, "1", "", "", "", "", c17) == expected
+
+        where:
+        c17  | expected
+        "10" | "10"
+        null | "No HbA1c Value"
+        ""   | "No HbA1c Value"
+    }
+
+    def "getComplianceStatus sets correct outcome"() {
+        given:
+        def measure = new Measure()
+
+        when:
+        udsCdeUtil.getComplianceStatus(measure, qid, c3)
+
+        then:
+        measure.outcome == expected
+
+        where:
+        qid | c3  | expected
+        225 | "1" | "NOT_ACHIEVED"
+        225 | "0" | "ACHIEVED"
+        201 | "1" | "ACHIEVED"
+        201 | "0" | "NOT_ACHIEVED"
+    }
+
+    def "determineItemName returns correct value"() {
+        expect:
+        udsCdeUtil.determineItemName(qid, c3, description) == expected
+
+        where:
+        qid | c3  | description | expected
+        225 | "1" | "desc"      | ""
+        225 | "0" | "desc"      | "desc"
+        203 | "1" | "desc"      | ""
+        203 | "0" | "desc"      | "desc"
+    }
+} 
