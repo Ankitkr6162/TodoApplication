@@ -194,3 +194,520 @@ WHERE ecd.qid IN (201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) A
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package analytics.rcp.uds.util;
+
+import analytics.rcp.model.Measure;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+import static analytics.rcp.uds.constant.UdsCdeConstants.*;
+
+public class UdsCdeUtil {
+    private static final Map<Integer, String> measureNames;
+
+    static {
+        measureNames = new HashMap<>();
+        measureNames.put(201, "Cervical Cancer Screening");
+        measureNames.put(203, "HIV Screening");
+        measureNames.put(205, "Adult BMI");
+        measureNames.put(208, "Colorectal Cancer Screening");
+        measureNames.put(213, "Childhood BMI");
+        measureNames.put(218, "IVD");
+        measureNames.put(220, "Depression Screening");
+        measureNames.put(223, "Depression Remission");
+        measureNames.put(225, "Diabetes");
+        measureNames.put(228, "Hypertension");
+        measureNames.put(230, "Statin Therapy");
+        measureNames.put(232, "Tobacco Screening");
+        measureNames.put(235, "Breast Cancer Screening");
+        measureNames.put(240, "SUD Initiation");
+        measureNames.put(242, "SUD Engagement");
+    }
+
+    public String getMeasureName(int qid) {
+        return measureNames.getOrDefault(qid, "");
+    }
+
+
+//    public String getSupportingFact(int qid, String c3, String c5, String c6, String c7, String c17) {
+//        if ("0".equals(c3)) {
+//            return handleSupportingFactsC3EqualsZero(qid, c5, c6, c7);
+//        } else if ("1".equals(c3) && qid == 225) {
+//            return handleSupportingFactsC3EqualsOne(c17);
+//        }
+//        return "";
+//    }
+
+//    public String getSupportingFact(int qid, String c3, String c5, String c6, String c7, String c17, String c26, String c27) {
+//        if ("0".equals(c3)) {
+//            if (qid == 240) {
+//                if ("0".equals(c27)) return "Treatment Initiation Pending";
+//                if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+//            } else if (qid == 242) {
+//                if ("0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+//                if ("0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+//                if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+//            } else {
+//                return handleSupportingFactsC3EqualsZero(qid, c5, c6, c7);
+//            }
+//        } else if ("1".equals(c3) && qid == 225) {
+//            return handleSupportingFactsC3EqualsOne(c17);
+//        }
+//
+//        return "";
+//    }
+
+//    public String getSupportingFact(int qid, String c3, String c5, String c6, String c7, String c17, String c26, String c27) {
+//        if ("0".equals(c3)) {
+//            switch (qid) {
+//                case 240:
+//                    return handleSupportingFactForSUDInitiation(c27);
+//                case 242:
+//                    return handleSupportingFactForSUDEngagement(c26, c27);
+//                default:
+//                    return handleSupportingFactsC3EqualsZero(qid, c5, c6, c7);
+//            }
+//        } else if ("1".equals(c3) && qid == 225) {
+//            return handleSupportingFactsC3EqualsOne(c17);
+//        }
+//        return "";
+//    }
+//
+//
+//
+//    private String handleSupportingFactForSUDInitiation(String c27) {
+//        if ("0".equals(c27)) return "Treatment Initiation Pending";
+//        if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+//        return "";
+//    }
+//
+//    private String handleSupportingFactForSUDEngagement(String c26, String c27) {
+//        if ("0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+//        if ("0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+//        if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+//        return "";
+//    }
+
+    public String getSupportingFact(int qid, Map<String, String> params) {
+        if (qid == 240) return handleSupportingFactFor240(params);
+        if (qid == 242) return handleSupportingFactFor242(params);
+        if ("0".equals(params.get("c3"))) {
+            return handleSupportingFactsC3EqualsZero(qid, params.get("c5"), params.get("c6"), params.get("c7"));
+        } else if ("1".equals(params.get("c3")) && qid == 225) {
+            return handleSupportingFactsC3EqualsOne(params.get("c17"));
+        }
+        return "";
+    }
+
+
+
+    private String handleSupportingFactFor240(Map<String, String> params) {
+        String c3 = params.get("c3");
+        String c27 = params.get("c27");
+        if ("1".equals(c3)) return "";
+        if ("0".equals(c3) && "0".equals(c27)) return "Treatment Initiation Pending";
+        if ("0".equals(c3) && isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+        return null;
+    }
+
+    private String handleSupportingFactFor242(Map<String, String> params) {
+        String c3 = params.get("c3");
+        String c26 = params.get("c26");
+        String c27 = params.get("c27");
+        if ("1".equals(c3)) return "";
+        if ("0".equals(c3) && "0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+        if ("0".equals(c3) && "0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+        if ("0".equals(c3) && isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+        return null;
+    }
+
+    private String handleSupportingFactsC3EqualsZero(int qid, String c5, String c6, String c7) {
+        Map<Integer, Function<String[], String>> qidHandlers = new HashMap<>();
+        qidHandlers.put(213, this::handleChildhoodBMISupportingFacts);
+        qidHandlers.put(205, this::handleAdultBMISupportingFacts);
+        qidHandlers.put(232, this::handleTobaccoScreeningSupportingFacts);
+        qidHandlers.put(201, this::handleSupportingFactsC5EqualsOne);
+        qidHandlers.put(235, this::handleSupportingFactsC5EqualsOne);
+        qidHandlers.put(208, this::handleSupportingFactsC5EqualsOne);
+        qidHandlers.put(230, this::handleSupportingFactsForMedicationNotPrescribed);
+        qidHandlers.put(218, this::handleSupportingFactsForMedicationNotPrescribed);
+        qidHandlers.put(203, this::handleSupportingFactsC5EqualsOne);
+        qidHandlers.put(228, this::handleSupportingFactsForVitalNotTaken);
+        qidHandlers.put(220, this::handleSupportingFactsForDepressionScreening);
+        qidHandlers.put(223, this::handleSupportingFactsForDepressionRemission);
+
+        Function<String[], String> handler = qidHandlers.get(qid);
+        if (handler != null) {
+            return handler.apply(new String[]{c5, c6, c7});
+        }
+        return "";
+    }
+
+    private String handleSupportingFactsC3EqualsOne(String c17) {
+        if (isEmpty(c17)) return "No HbA1c Ordered";
+        int c17Value = Integer.parseInt(c17);
+        return c17Value > 9 ? "HbA1c Value > 9" : "";
+    }
+
+    private String handleChildhoodBMISupportingFacts(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        String c7 = params[2];
+        if (isNotEmpty(c5) && isNotEmpty(c6) && isNotEmpty(c7)) return VITALS_NOT_TAKEN_SUPPORTING_FACT;
+        if (isEmpty(c5) && isNotEmpty(c6) && isNotEmpty(c7)) return "Nutrition Counseling Pending";
+        if (isEmpty(c5) && isEmpty(c6) && isNotEmpty(c7)) return "Nutrition Counseling Done";
+        if (isEmpty(c5) && isNotEmpty(c6) && isEmpty(c7)) return "Physical Activity Done";
+        return VITALS_NOT_TAKEN_SUPPORTING_FACT;
+    }
+
+    private String handleAdultBMISupportingFacts(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return VITALS_NOT_TAKEN_SUPPORTING_FACT;
+        if (isNotEmpty(c5) && isEmpty(c6)) return VITALS_NOT_TAKEN_SUPPORTING_FACT;
+        return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+    }
+
+    private String handleTobaccoScreeningSupportingFacts(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return SCREENING_NOT_DONE_SUPPORTING_FACT;
+        if (isNotEmpty(c5) && isEmpty(c6)) return SCREENING_NOT_DONE_SUPPORTING_FACT;
+        return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+    }
+
+    private String handleSupportingFactsC5EqualsOne(String[] params) {
+        String c5 = params[0];
+        return isNotEmpty(c5) ? SCREENING_NOT_DONE_SUPPORTING_FACT : "";
+    }
+
+    private String handleSupportingFactsForMedicationNotPrescribed(String[] params) {
+        String c5 = params[0];
+        return isNotEmpty(c5) ? "Medication not Prescribed" : "";
+    }
+
+    private String handleSupportingFactsForVitalNotTaken(String[] params) {
+        String c5 = params[0];
+        return isNotEmpty(c5) ? VITALS_NOT_TAKEN_SUPPORTING_FACT : "";
+    }
+
+    private String handleSupportingFactsForDepressionScreening(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        if (isNotEmpty(c5) && isEmpty(c6)) return "Screening not Done";
+        if (isEmpty(c5) && isNotEmpty(c6)) return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+        return "Screening not Done";
+    }
+
+    private String handleSupportingFactsForDepressionRemission(String[] params) {
+        String c5 = params[0];
+        return isNotEmpty(c5) ? "Remission Screening Not Done" : "";
+    }
+
+    private boolean isNotEmpty(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private boolean isEmpty(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+
+    public String getDate(int qid, String c3, String c5, String c6, String c7, String c9, String c17) {
+        if ("0".equals(c3)) {
+            return handleDateC3EqualsZeroForDate(qid, c5, c6, c7, c9);
+        } else if ("1".equals(c3) && qid == 225) {
+            return handleDateC3EqualsOneForDate(c17);
+        }
+        return "";
+    }
+
+//    public String getDate(int qid, String c3, String c5, String c6, String c7, String c9, String c17, String c26, String c27) {
+//        if ("0".equals(c3)) {
+//            if (qid == 240) {
+//                if ("0".equals(c27)) return "Treatment Initiation Pending";
+//                if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+//            } else if (qid == 242) {
+//                if ("0".equals(c27) && "0".equals(c26)) return "Patient Engagement Required";
+//                if ("0".equals(c27) && "1".equals(c26)) return "One More Engagement Required";
+//                if (isNotEmpty(c27) && !"0".equals(c27)) return "Compliance Period Closed: No Further Action Possible";
+//            } else {
+//                return handleDateC3EqualsZeroForDate(qid, c5, c6, c7, c9);
+//            }
+//        } else if ("1".equals(c3) && qid == 225) {
+//            return handleDateC3EqualsOneForDate(c17);
+//        }
+//
+//        return "";
+//    }
+
+    private String handleDateC3EqualsZeroForDate(int qid, String c5, String c6, String c7, String c9) {
+        Map<Integer, Function<String[], String>> qidHandlers = new HashMap<>();
+        qidHandlers.put(213, this::handleDateForChildhoodBMI);
+        qidHandlers.put(205, this::handleDateForAdultBMI);
+        qidHandlers.put(232, this::handleDateForTobaccoScreening);
+        qidHandlers.put(220, this::handleDateForDepressionScreening);
+
+        Function<String[], String> handler = qidHandlers.get(qid);
+        if (handler != null) {
+            return handler.apply(new String[]{c5, c6, c7, c9});
+        }
+        return "";
+    }
+
+    private String handleDateC3EqualsOneForDate(String c17) {
+        if (isNotEmpty(c17)) return c17;
+        return "No HbA1c Value";
+    }
+
+    private String handleDateForChildhoodBMI(String[] params) {
+        String c5 = params[0];
+        String  c6 = params[1];
+        String c7 = params[2];
+        if (isNotEmpty(c5) && isNotEmpty(c6) && isNotEmpty(c7)) return "Nutrition Counseling and Physical Activity Pending";
+        if (isEmpty(c5) && isNotEmpty(c6) && isNotEmpty(c7)) return PHYSICAL_ACTIVITY_PENDING_FOR_DATE;
+        if (isEmpty(c5) && isEmpty(c6) && isNotEmpty(c7)) return PHYSICAL_ACTIVITY_PENDING_FOR_DATE;
+        if (isEmpty(c5) && isNotEmpty(c6) && isEmpty(c7)) return "Nutrition Counseling Pending";
+        if (isNotEmpty(c5) && isEmpty(c6) && isEmpty(c7)) return "Nutrition Counseling and Physical Activity Done";
+        if (isNotEmpty(c5) && isEmpty(c6) && isNotEmpty(c7)) return PHYSICAL_ACTIVITY_PENDING_FOR_DATE;
+        if (isNotEmpty(c5) && isNotEmpty(c6) && isEmpty(c7)) return "Nutrition Counselling Pending";
+        return "";
+    }
+
+    private String handleDateForAdultBMI(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        String c9 = params[3];
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+        if (isNotEmpty(c5) && isEmpty(c6)) return FOLLOW_UP_COMPLETED_FOR_DATE;
+        if (isEmpty(c5) && isNotEmpty(c6)) {
+            switch (c9) {
+                case "0": return "Vitals Taken-Normal Weight";
+                case "1": return "Vitals Taken-Under Weight";
+                case "2": return "Vitals Taken-Over Weight";
+                default: return  "";
+            }
+        }
+        return "";
+    }
+
+    private String handleDateForTobaccoScreening(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+        if (isNotEmpty(c5) && isEmpty(c6)) return FOLLOW_UP_COMPLETED_FOR_DATE;
+        if (isEmpty(c5) && isNotEmpty(c6)) return "Screening Completed";
+        return "";
+    }
+
+    private String handleDateForDepressionScreening(String[] params) {
+        String c5 = params[0];
+        String c6 = params[1];
+        String c9 = params[3];
+        if (isNotEmpty(c5) && isEmpty(c6)) return FOLLOW_UP_COMPLETED_FOR_DATE;
+        if (isEmpty(c5) && isNotEmpty(c6)) {
+            switch (c9) {
+                case "0": return "Screening Completed-Negative";
+                case "1": return "Screening Completed-Positive";
+                default: return "";
+            }
+        }
+        if (isNotEmpty(c5) && isNotEmpty(c6)) return FOLLOW_UP_NOT_DONE_SUPPORTING_FACTS;
+        return "";
+    }
+
+
+
+    public void getComplianceStatus(Measure measure, int qid, String c3) {
+        if (qid == 225) {
+            measure.setOutcome("1".equals(c3) ? "NOT_ACHIEVED" : "ACHIEVED");
+        } else {
+            measure.setOutcome("1".equals(c3) ? "ACHIEVED" : "NOT_ACHIEVED");
+        }
+    }
+
+    public String determineItemName(int qid, String c3, String description) {
+        if (qid == 225 && "1".equals(c3)) {
+            return "";
+        } else if (qid == 225 && "0".equals(c3)) {
+            return description;
+        }
+        return "1".equals(c3) ? "" : description;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+package analytics.rcp.uds.util
+
+
+import analytics.rcp.model.Measure
+import spock.lang.Unroll
+import util.ECWSpec
+
+class UdsCdeUtilSpec extends ECWSpec{
+
+    def udsCdeUtil = new UdsCdeUtil()
+
+    @Unroll
+    def "test getSupportingFact with qid=#qid, c3=#c3, c5=#c5, c6=#c6, c7=#c7, c17=#c17"() {
+        expect:
+        udsCdeUtil.getSupportingFact(qid, c3, c5, c6, c7, c17) == expectedOutput
+
+        where:
+        qid | c3  | c5   | c6   | c7   | c17   || expectedOutput
+        213 | "0" | null | null | null | null  || "Vitals Not Taken" // handleChildhoodBMISupportingFacts scenario
+        205 | "0" | "x"  | null | null | null  || "Vitals Not Taken" // handleAdultBMISupportingFacts scenario
+        205 | "0" | null | "x"  | null | null  || "Follow Up Not Done"
+        232 | "0" | "x"  | "y"  | null | null  || "Screening Not Done" // handleTobaccoScreeningSupportingFacts
+        232 | "0" | "x"  | null | null | null  || "Screening Not Done"
+        232 | "0" | null | "x"  | null | null  || "Follow Up Not Done"
+        201 | "0" | "x"  | null | null | null  || "Screening Not Done" // handleSupportingFactsC5EqualsOne
+        225 | "1" | null | null | null | "10"  || "HbA1c Value > 9" // handleSupportingFactsC3EqualsOne
+        225 | "1" | null | null | null | null  || "No HbA1c Ordered" // handleSupportingFactsC3EqualsOne (empty c17)
+        230 | "0" | "x"  | null | null | null  || "Medication not Prescribed" // handleSupportingFactsForMedicationNotPrescribed
+        220 | "0" | "x"  | null | null | null  || "Screening not Done" // handleSupportingFactsForDepressionScreening
+        220 | "0" | null | "x"  | null | null  || "Follow Up Not Done"
+        220 | "0" | "x"  | "y"  | null | null  || "Screening not Done"
+        223 | "0" | "x"  | null | null | null  || "Remission Screening Not Done" // handleSupportingFactsForDepressionRemission
+        228 | "0" | "x"  | null | null | null  || "Vitals Not Taken"
+        0   | "0" | null | null | null | null  || "" // no matching qid
+        -1  | "-1"| null | null | null | null  || ""
+    }
+
+
+    @Unroll
+    def "test getDate with qid=#qid, c3=#c3, c5=#c5, c6=#c6, c7=#c7, c9=#c9, c17=#c17"() {
+        expect:
+        udsCdeUtil.getDate(qid, c3, c5, c6, c7, c9, c17) == expectedOutput
+
+        where:
+        qid | c3  | c5   | c6   | c7   | c9   | c17   || expectedOutput
+        213 | "0" | "x"  | "y"  | "z"  | null | null  || "Nutrition Counseling and Physical Activity Pending" // Childhood BMI
+        213 | "0" | null | "y"  | "z"  | null | null  || "Physical Activity Pending"
+        213 | "0" | "x"  | null | null | null | null  || "Nutrition Counseling and Physical Activity Done"
+        213 | "0" | "x"  | null | "y"  | null | null  || "Physical Activity Pending"
+        213 | "0" | "x"  | "y"  | null | null | null  || "Nutrition Counselling Pending"
+        213 | "0" | null | null | null | null | null  || ""
+        205 | "0" | "x"  | "y"  | null | null | null  || "Follow Up Not Done" // Adult BMI
+        205 | "0" | "x"  | null | null | null | null  || "Follow Up Completed"
+        205 | "0" | null | "y"  | null | "0"  | null  || "Vitals Taken-Normal Weight"
+        205 | "0" | null | "y"  | null | "1"  | null  || "Vitals Taken-Under Weight"
+        205 | "0" | null | "x"  | null | "2"  | null  || "Vitals Taken-Over Weight"
+        205 | "0" | null | "x"  | null | "-1" | null  || ""
+        205 | "0" | null | null | null | null | null  || ""
+        232 | "0" | "x"  | "y"  | null | null | null  || "Follow Up Not Done" // Tobacco Screening
+        232 | "0" | "x"  | null | null | null | null  || "Follow Up Completed"
+        232 | "0" | null | "y"  | null | null | null  || "Screening Completed"
+        232 | "0" | null | null | null | null | null  || ""
+        220 | "0" | "x"  | null | null | null | null  || "Follow Up Completed" // Depression Screening
+        220 | "0" | null | "y"  | null | "0"  | null  || "Screening Completed-Negative"
+        220 | "0" | null | "y"  | null | "1"  | null  || "Screening Completed-Positive"
+        220 | "0" | "x"  | "y"  | null | null | null  || "Follow Up Not Done"
+        220 | "0" | null | "x"  | null | "-1" | null  || ""
+        220 | "0" | null | null | null | null | null  || ""
+        225 | "1" | null | null | null | null | "2023" || "2023" // HbA1c Date (C3 = 1)
+        225 | "1" | null | null | null | null | null  || "No HbA1c Value" // HbA1c Date (empty c17)
+        0   | "0" | null | null | null | null | null  || "" // No handler
+        -1  | "-1"| null | null | null | null | null  || ""
+    }
+
+
+
+
+    @Unroll
+    def "test getComplianceStatus with qid=#qid and c3=#c3"() {
+        given: "A Measure object"
+        def measure = new Measure()
+
+        when: "getComplianceStatus is called"
+        udsCdeUtil.getComplianceStatus(measure, qid, c3)
+
+        then: "The outcome is correctly set in the Measure object"
+        measure.getOutcome() == expectedOutcome
+
+        where:
+        qid  | c3     || expectedOutcome
+        225  | "1"    || "NOT_ACHIEVED" // Special handling for qid 225
+        225  | "0"    || "ACHIEVED"     // Special handling for qid 225
+        100  | "1"    || "ACHIEVED"     // General case (qid != 225)
+        100  | "0"    || "NOT_ACHIEVED" // General case (qid != 225)
+        300  | "1"    || "ACHIEVED"     // General case (qid != 225)
+        300  | "0"    || "NOT_ACHIEVED" // General case (qid != 225)
+    }
+
+    @Unroll
+    def "test determineItemName with qid=#qid, c3=#c3, description=#description"() {
+        when: "determineItemName is called"
+        def result = udsCdeUtil.determineItemName(qid, c3, description)
+
+        then: "The result matches the expected value"
+        result == expected
+
+        where:
+        qid  | c3     | description         || expected
+        225  | "1"    | "Test Description"  || ""          // qid = 225, c3 = 1
+        225  | "0"    | "Test Description"  || "Test Description" // qid = 225, c3 = 0
+        100  | "1"    | "Another Description" || ""          // qid != 225, c3 = 1
+        100  | "0"    | "Another Description" || "Another Description" // qid != 225, c3 = 0
+        300  | "1"    | "Sample"            || ""          // qid != 225, c3 = 1
+        300  | "0"    | "Sample"            || "Sample"    // qid != 225, c3 = 0
+    }
+
+
+    @Unroll
+    def "test getMeasureName with qid=#qid"() {
+        when: "getMeasureName is called"
+        def result = udsCdeUtil.getMeasureName(qid)
+
+        then: "The result matches the expected measure name"
+        result == expected
+
+        where:
+        qid  || expected
+        201  || "Cervical Cancer Screening"  // Valid qid in the map
+        203  || "HIV Screening"             // Valid qid in the map
+        205  || "Adult BMI"                 // Valid qid in the map
+        208  || "Colorectal Cancer Screening" // Valid qid in the map
+        213  || "Childhood BMI"             // Valid qid in the map
+        218  || "IVD"                       // Valid qid in the map
+        220  || "Depression Screening"      // Valid qid in the map
+        223  || "Depression Remission"      // Valid qid in the map
+        225  || "Diabetes"                  // Valid qid in the map
+        228  || "Hypertension"              // Valid qid in the map
+        230  || "Statin Therapy"            // Valid qid in the map
+        232  || "Tobacco Screening"         // Valid qid in the map
+        235  || "Breast Cancer Screening"   // Valid qid in the map
+        999  || ""                          // Invalid qid, should return default empty string
+        -1   || ""                          // Invalid qid, should return default empty string
+        0    || ""                          // Invalid qid, should return default empty string
+    }
+}
+
+
+
+
