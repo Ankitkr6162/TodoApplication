@@ -711,3 +711,81 @@ class UdsCdeUtilSpec extends ECWSpec{
 
 
 
+import spock.lang.Specification
+import analytics.rcp.model.Measure
+
+class UdsCdeUtilSpec extends Specification {
+
+    def udsCdeUtil = new UdsCdeUtil()
+
+    def "should return correct measure name"() {
+        expect:
+        udsCdeUtil.getMeasureName(qid) == expectedName
+
+        where:
+        qid | expectedName
+        201 | "Cervical Cancer Screening"
+        225 | "Diabetes"
+        999 | "" // unknown qid
+    }
+
+    def "should return supporting fact for qid 240"() {
+        given:
+        Map<String, String> params = ["c3": c3, "c27": c27]
+
+        expect:
+        udsCdeUtil.getSupportingFact(240, params) == expected
+
+        where:
+        c3 | c27 | expected
+        "1" | "any" | ""
+        "0" | "0" | "Treatment Initiation Pending"
+        "0" | "1" | "Compliance Period Closed: No Further Action Possible"
+    }
+
+    def "should return date based on qid 205 and c3 = 0"() {
+        given:
+        def result = udsCdeUtil.getDate(205, "0", c5, c6, "", c9, "")
+
+        expect:
+        result == expected
+
+        where:
+        c5     | c6     | c9  | expected
+        "x"    | "y"    | ""  | "Follow-up Not Done"
+        "x"    | ""     | ""  | "Follow-up Completed"
+        ""     | "y"    | "0" | "Vitals Taken-Normal Weight"
+        ""     | "y"    | "1" | "Vitals Taken-Under Weight"
+        ""     | "y"    | "2" | "Vitals Taken-Over Weight"
+    }
+
+    def "should set compliance status correctly for qid 225"() {
+        given:
+        def measure = new Measure()
+
+        when:
+        udsCdeUtil.getComplianceStatus(measure, qid, c3)
+
+        then:
+        measure.outcome == expected
+
+        where:
+        qid | c3  | expected
+        225 | "1" | "NOT_ACHIEVED"
+        225 | "0" | "ACHIEVED"
+        201 | "1" | "ACHIEVED"
+        201 | "0" | "NOT_ACHIEVED"
+    }
+
+    def "should determine item name correctly"() {
+        expect:
+        udsCdeUtil.determineItemName(qid, c3, description) == expected
+
+        where:
+        qid | c3  | description      | expected
+        225 | "1" | "Diabetes Check" | ""
+        225 | "0" | "Diabetes Check" | "Diabetes Check"
+        203 | "1" | "HIV Test"       | ""
+        203 | "0" | "HIV Test"       | "HIV Test"
+    }
+}
