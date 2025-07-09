@@ -1,0 +1,234 @@
+package emr.clinicalruleengine.uds.constant;
+
+public class UdsQuery {
+
+    public final static String UDS_MEASURE_QUERY = "  SELECT DISTINCT ecd.qid,  \n" +
+            "(CASE WHEN ecd.qid = 201 THEN 'Cervical Cancer Screening'  \n" +
+            "WHEN ecd.qid = 203 THEN 'HIV Screening'  \n" +
+            " WHEN ecd.qid = 205 THEN 'Adult BMI'  \n" +
+            " WHEN ecd.qid = 208 THEN 'Colorectal Cancer Screening'  \n" +
+            " WHEN ecd.qid = 213 THEN 'Childhood BMI'  \n" +
+            " WHEN ecd.qid = 218 THEN 'IVD'  \n" +
+            " WHEN ecd.qid = 220 THEN 'Depression Screening'  \n" +
+            " WHEN ecd.qid = 223 THEN 'Depression Remission'  \n" +
+            " WHEN ecd.qid = 225 THEN 'Diabetes'  \n" +
+            " WHEN ecd.qid = 228 THEN 'Hypertension'  \n" +
+            " WHEN ecd.qid = 230 THEN 'Statin Therapy'  \n" +
+            " WHEN ecd.qid = 232 THEN 'Tobacco Screening'  \n" +
+            " WHEN ecd.qid = 235 THEN 'Breast Cancer Screening'  \n" +
+            " WHEN ecd.qid = 240 THEN 'SUD Initiation' \n" +
+            " WHEN ecd.qid = 242 THEN 'SUD Enagagement' \n" +
+            " END ) AS 'Measure_Name'  \n" +
+            " FROM ebo_cde_master_query ecd  \n" +
+            " WHERE ecd.qid IN (201,203,205,208,213,218,220,223,225,228,230,232,235,240,242) \n" +
+            " AND ecd.cdeid = 2 ; ";
+
+    public final static String ACTIVE_QUERY = "SELECT active FROM eBO_CDE_master_program where cdeid = 2";
+
+//    public final static String OUTCOME_UDS_QUERY = "SELECT \n" +
+//            "CAST(c2 AS DECIMAL) AS 'PatientID',\n" +
+//            "CAST(qid AS DECIMAL) AS 'Measure_ID'\n" +
+//            "FROM ebo_cde_detail WHERE qid = :measureId AND CAST(C3 AS DECIMAL) = 0 AND C2 = :patientId";
+
+    public final static String OUTCOME_UDS_QUERY = "SELECT CAST(d.c2 AS DECIMAL) AS 'PatientID', CAST(d.qid AS DECIMAL) AS 'Measure_ID'\n" +
+            "FROM ebo_cde_detail d\n" +
+            "INNER JOIN (\n" +
+            "SELECT C2,qid, MAX(ID) AS max_id\n" +
+            "FROM ebo_cde_detail\n" +
+            "WHERE ( qid IN (220, 223, 240, 242) AND CAST(C3 AS DECIMAL) = 0 AND CAST(C27 AS DECIMAL) = 0)\n" +
+            "OR ( qid IN (201,203,205,208,213,218,225,228,230,232,235) AND CAST(C3 AS DECIMAL) = 0) \n" +
+            "GROUP BY C2,qid) latest ON d.C2 = latest.C2 AND d.ID = latest.max_id\n" +
+            "WHERE (( d.qid IN (220, 223, 240, 242) AND CAST(d.C3 AS DECIMAL) = 0 AND CAST(d.C27 AS DECIMAL) = 0 )\n" +
+            "OR ( d.qid IN (201,203,205,208,213,218,225,228,230,232,235) AND CAST(d.C3 AS DECIMAL) = 0 )) AND d.qid = :measureId AND d.C2 = :patientId";
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package emr.clinicalruleengine.uds.service;
+
+import CwMobile.CwUtils;
+import analytics.rcp.model.Measure;
+import emr.clinicalruleengine.uds.dao.UdsCreDao;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import java.util.ArrayList;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import static emr.clinicalruleengine.uds.constant.UdsCreConstant.EBO_CDE_JOB_ITEMKEY_NAME;
+import static emr.clinicalruleengine.uds.constant.UdsCreConstant.ENABLE_EBO_CDE_JOB_ITEMKEY;
+
+
+
+@Service
+public class UdsCreService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(UdsCreService.class);
+    @Autowired
+    private final UdsCreDao udsCreDao;
+
+    public UdsCreService(UdsCreDao udsCreDao) {
+        this.udsCreDao = udsCreDao;
+    }
+
+    public List<Measure> generateUDSMeasureCre() {
+        if(("yes").equalsIgnoreCase(CwUtils.getItemKeyValue(null, EBO_CDE_JOB_ITEMKEY_NAME)) && udsCreDao.getUdsActiveStatus() != -1) {
+            return udsCreDao.generateUDSMeasureCre();
+        }
+        LOGGER.info("Returns the UDS measure");
+        return new ArrayList<>();
+    }
+
+    public boolean generateUDSPatientsOutcome(String patientId, int measureId) {
+        if (CwUtils.getItemKeyValue(null, EBO_CDE_JOB_ITEMKEY_NAME).equalsIgnoreCase(ENABLE_EBO_CDE_JOB_ITEMKEY) && udsCreDao.getUdsActiveStatus() != -1)
+            return udsCreDao.getUDSPatientOutcome(patientId, measureId);
+        LOGGER.info("Returns the UDS Patients outcome");
+        return false;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+package emr.clinicalruleengine.uds.dao;
+
+import analytics.rcp.model.Measure;
+import emr.clinicalruleengine.uds.exception.PatientDataNotFoundException;
+import emr.clinicalruleengine.uds.rowmapper.MeasureRowMapper;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+import org.springframework.stereotype.Repository;
+import javax.sql.DataSource;
+import java.util.List;
+import java.util.Map;
+import static emr.clinicalruleengine.uds.constant.UdsCreConstant.MEASURE_NAME;
+import static emr.clinicalruleengine.uds.constant.UdsCreConstant.PATIENT_ID;
+import static emr.clinicalruleengine.uds.constant.UdsQuery.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+@Repository
+public class UdsCreDao {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(UdsCreDao.class);
+
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
+    public UdsCreDao(DataSource dataSource) {
+        this.namedParameterJdbcTemplate = new NamedParameterJdbcTemplate(dataSource);
+    }
+
+    public List<Measure> generateUDSMeasureCre() {
+        List<Measure> measures = namedParameterJdbcTemplate.query(UDS_MEASURE_QUERY, new MeasureRowMapper());
+        LOGGER.info("Returns the UDS measure");
+        return measures;
+    }
+
+//    public boolean getUDSPatientOutcome(String patientId, int measureId) {
+//
+//        try {
+//            SqlParameterSource param = new MapSqlParameterSource().addValue(PATIENT_ID, patientId).addValue(MEASURE_NAME, measureId);
+//
+//            Map<String, Object> data = namedParameterJdbcTemplate.queryForMap(OUTCOME_UDS_QUERY, param);
+//            LOGGER.info("Returns the UDS Patients outcome");
+//            if (data.get(PATIENT_ID) != null) return true;
+//        } catch (PatientDataNotFoundException e) {
+//            LOGGER.error("Exception has occured");
+//        }
+//        return false;
+//    }
+
+    public boolean getUDSPatientOutcome(String patientId, int measureId) {
+        SqlParameterSource param = new MapSqlParameterSource().addValue(PATIENT_ID, patientId).addValue(MEASURE_NAME, measureId);
+        try {
+            List<Map<String, Object>> resultList = namedParameterJdbcTemplate.queryForList(OUTCOME_UDS_QUERY, param);
+            LOGGER.info("Returns the UDS Patients outcome");
+            return !resultList.isEmpty();
+        } catch (Exception e) {
+            LOGGER.error("Exception occurred while fetching UDS patients outcome", e);
+            return false;
+        }
+    }
+
+    public int getUdsActiveStatus() {
+        int active = -1;
+        List<Integer> activeStatus = namedParameterJdbcTemplate.query(ACTIVE_QUERY, (rs, rowNum) -> new MeasureRowMapper().activeStatus(rs));
+        if (!activeStatus.isEmpty()) return activeStatus.get(0);
+        return active;
+    }
+}
+
+
+
+
+
+
+
+
+
+package emr.clinicalruleengine.uds.controller;
+
+import analytics.rcp.model.Measure;
+import emr.clinicalruleengine.uds.service.UdsCreService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+@RestController
+public class UdsCreController {
+    private static final Logger LOGGER = LoggerFactory.getLogger(UdsCreController.class);
+
+
+    private final UdsCreService udsCreService;
+
+    public UdsCreController(UdsCreService udsCreService) {
+        this.udsCreService = udsCreService;
+    }
+
+    @GetMapping(value = "/uds-measure")
+    public List<Measure> getUDSMeasure() {
+        return udsCreService.generateUDSMeasureCre();
+    }
+
+    @GetMapping(value = "/uds-patient")
+    public boolean getUDSPatientOutcome(@RequestParam String patientId, @RequestParam int measureId) {
+        return udsCreService.generateUDSPatientsOutcome(patientId, measureId);
+    }
+}
