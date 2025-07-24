@@ -1,0 +1,274 @@
+package pharmacy.toppanel.service;
+
+import itemkey.ItemKey;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import pharmacy.menu.ILeftMenuDisplaySecurity;
+import pharmacy.toppanel.dao.PharmacyMenuDao;
+import pharmacy.toppanel.model.PharmacyMenu;
+import pharmacy.toppanel.model.PharmacyMenuBand;
+import pharmacy.toppanel.model.PharmacyMenuTile;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class PharmacyMenuService {
+
+    @Autowired
+    private ILeftMenuDisplaySecurity leftMenuDisplaySecurity;
+
+    @Autowired
+    private PharmacyMenuDao leftMenuDisplayDao;
+
+    public static final int MENU_VISIBLE = 1;
+    public static final int MENU_NOT_VISIBLE = 0;
+    public static final int MENU_VISIBLE_AND_DISABLE = 2;
+    public static final String ITEM_KEY_VAL = "yes";
+
+    public PharmacyMenu getPharmacyPlusLeftMenus(int trUserId) {
+        PharmacyMenu pharmacyMenu = new PharmacyMenu();
+        pharmacyMenu.setTiles(getPPlusLeftMenuTiles(trUserId,0));
+        pharmacyMenu.setBands(getPPlusLeftMenuBands(trUserId));
+        return pharmacyMenu;
+    }
+
+    private List<PharmacyMenuTile> getPPlusLeftMenuTiles(int trUserId, int parentId) {
+        Map<String, Integer> healowPlusLeftMenuSecurity = getPharmacyPlusLeftMenuPermissions(trUserId);
+        List<PharmacyMenuTile> tiles = new ArrayList<>();
+        List<PharmacyMenuTile> tiles1 = leftMenuDisplayDao.getPPlusLeftMenuTiles1(parentId);
+        for (PharmacyMenuTile tile : tiles1) {
+            if(healowPlusLeftMenuSecurity.containsKey(tile.getMenuItemName().toUpperCase()) && healowPlusLeftMenuSecurity.get(tile.getMenuItemName().toUpperCase()) == MENU_VISIBLE) {
+                tiles.add(tile);
+            }else if(healowPlusLeftMenuSecurity.containsKey(tile.getMenuItemName().toUpperCase()) && healowPlusLeftMenuSecurity.get(tile.getMenuItemName().toUpperCase()) == MENU_VISIBLE_AND_DISABLE) {
+                tile.setGreyed(true);
+                tile.setToolTip(setTooltip(tile.getMenuItemName().toUpperCase()));
+                tiles.add(tile);
+            }
+        }
+        List<PharmacyMenuTile> tiles2 = leftMenuDisplayDao.getPPlusLeftMenuTiles2(parentId);
+        for (PharmacyMenuTile tile : tiles2) {
+            if(healowPlusLeftMenuSecurity.containsKey(tile.getMenuItemName().toUpperCase()) && healowPlusLeftMenuSecurity.get(tile.getMenuItemName().toUpperCase()) == MENU_VISIBLE) {
+                tiles.add(tile);
+            }
+        }
+        List<PharmacyMenuTile> tiles3 = leftMenuDisplayDao.getPPlusLeftMenuTiles3(parentId);
+        for (PharmacyMenuTile tile : tiles3) {
+            if(healowPlusLeftMenuSecurity.containsKey(tile.getMenuItemName().toUpperCase()) && healowPlusLeftMenuSecurity.get(tile.getMenuItemName().toUpperCase()) == MENU_VISIBLE) {
+                tiles.add(tile);
+            }
+        }
+        return tiles;
+    }
+
+    private List<PharmacyMenuBand> getPPlusLeftMenuBands(int trUserId) {
+        List<PharmacyMenuBand> bands = new ArrayList<>();
+        Map<String, Integer> healowPlusLeftMenuSecurity = getPharmacyPlusLeftMenuPermissions(trUserId);
+        List<PharmacyMenuBand> bands1 = leftMenuDisplayDao.getPPlusLeftMenuBands();
+        for (PharmacyMenuBand band : bands1) {
+            if (healowPlusLeftMenuSecurity.get(band.getBandName().toUpperCase()) != MENU_NOT_VISIBLE) {
+                band.setGreyed(!healowPlusLeftMenuSecurity.containsKey(band.getBandName().toUpperCase()) || healowPlusLeftMenuSecurity.get(band.getBandName().toUpperCase()) != MENU_VISIBLE);
+                band.setBand_items(getPPlusLeftMenuTiles(trUserId, band.getId()));
+                bands.add(band);
+            } else if(band.getBandName().toUpperCase().equals("LOGS")) {
+                boolean isVisible = healowPlusLeftMenuSecurity.containsKey(band.getBandName().toUpperCase()) && healowPlusLeftMenuSecurity.get(band.getBandName().toUpperCase()) == MENU_VISIBLE;
+                band.setGreyed(!isVisible);
+                band.setToolTip(isVisible ? band.getToolTip() : setTooltip(band.getBandName().toUpperCase()));
+                bands.add(band);
+            }
+        }
+        return bands;
+    }
+
+    private Map<String, Integer> getPharmacyPlusLeftMenuPermissions(int nTrUserId){
+        boolean bIsAdmin= ItemKey.getAPI().getItemIdFromDatabase("PharmacyModuleAdministrator")==nTrUserId;
+        boolean is340BEnabled =  ITEM_KEY_VAL.equalsIgnoreCase(ItemKey.getAPI().getValueFromCacheOrDatabase("enable340BModule"));
+
+        String[] defaultMenuItems = {
+                "340B AUDIT","340B ACCUMULATOR","340B PENDING","340B LOGS","MEDICAID EXCLUSION","340B SETUP",
+                "INVENTORY","INVENTORY MANAGEMENT","FAX","FAX OUTBOX","FAX INBOX SETTINGS","LIST DELETED FAXES",
+                "TPA","CLAIM DASHBOARD","PHARMACY LOCATIONS","HEALOW PAYMENT SERVICES CONFIGURATION","HEALOW PAYMENT SERVICES REPORT",
+                "RXPLANS","PRESCRIPTION INTAKE QUEUE","PATIENT REGISTRATION","POINT OF SALE","SECURITY SETTINGS",
+                "CONFIGURE PMP CLEARINGHOUSE","SWITCH CONFIGURATION","PRESCRIPTION LOGS","RX EDUCATION","DEVICES CONFIGURATION",
+                "PATIENT NOTIFICATION LOGS","PRICING RULE CONFIGURATION","AUTHENTICATION SETTINGS","HARD RESET PASSWORD","PDMP REPORT LOG"
+        };
+        Map<String, Integer> pharmacyPlusLeftMenuSecurity = new HashMap<>();
+        for (String menuItem : defaultMenuItems) {
+            pharmacyPlusLeftMenuSecurity.put(menuItem, MENU_VISIBLE);
+        }
+        pharmacyPlusLeftMenuSecurity.put("340 B", is340BEnabled ? MENU_VISIBLE:MENU_NOT_VISIBLE);
+        String[] conditionalMenuItems = {
+                "PHARMACY", "RX ADMIN", "PROVIDER LOOKUP", "PHARMACISTS", "PHARMACY STAFF",
+                "PHARMACY ADMINISTRATOR", "LOGS", "CONTROL RX LOG REPORT", "EPCS INCIDENT LOG","ARCHIVED LOG REPORT","ADMIN SETTING",
+                "RX NOTIFICATION CONFIGURATION"
+        };
+        String[] conditionalMenuPermissionKey = {
+                "PharmacyRxVerification", "manageRxAdmin", "managePharmacyProviderLookup", "manageRxAdminPharmacists", "manageRxAdminPharmacyStaff",
+                "manageRxAdminPharmacyAdmin", "AllowAccessToLogs", "viewControlRxLogReport", "viewEPCSIncidentLogReport","viewArchivedLogReport","ConfigureAdminSettings",
+                "manageRxAdmin"
+        };
+        for (int i = 0 ; i < conditionalMenuItems.length ; i++) {
+            if ("PHARMACY ADMINISTRATOR".equalsIgnoreCase(conditionalMenuItems[i]) && ItemKey.getAPI().getItemIdFromDatabase("PharmacyModuleAdministrator")<=0){
+                continue;
+            }else{
+                pharmacyPlusLeftMenuSecurity.put(conditionalMenuItems[i], (((leftMenuDisplaySecurity.getLeftNavPermissions(nTrUserId, conditionalMenuPermissionKey[i])).equals("1"))||bIsAdmin) ? 1:0);
+            }
+        }
+        pharmacyPlusLeftMenuSecurity.put("BILLING", (
+                leftMenuDisplaySecurity.getLeftNavPermissions(nTrUserId, "PharmacyClaims").equals("1")
+                        || leftMenuDisplaySecurity.getLeftNavPermissions(nTrUserId, "AllowAccessToPharmacyPaymentScreen").equals("1")
+                        || bIsAdmin
+        ) ? MENU_VISIBLE : MENU_VISIBLE_AND_DISABLE);
+        return pharmacyPlusLeftMenuSecurity;
+    }
+
+    public static String setTooltip(String menu){
+        if("BILLING".equals(menu)){
+            return "You do not have the necessary permissions to access this feature. Please contact your system administrator for assistance.";
+        } else if("LOGS".equals(menu)) {
+            return "You are not authorized to access the Logs menu. Kindly ask the admin to grant you permission to the Logs menu by enabling the security setting ‘Allow access to Logs’.";
+        }
+        return "";
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package pharmacy.toppanel.dao;
+
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
+import pharmacy.toppanel.model.PharmacyMenuBand;
+import pharmacy.toppanel.model.PharmacyMenuTile;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Repository
+public class PharmacyMenuDao {
+
+    @Autowired
+    private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
+    private static List<PharmacyMenuTile> extractTilesData(ResultSet rs, int isEmrMenu) throws SQLException {
+        List<PharmacyMenuTile> tiles = new ArrayList<>();
+        while (rs.next()) {
+            PharmacyMenuTile tile = new PharmacyMenuTile();
+            tile.setItemId(rs.getInt("Id"));
+            tile.setMenuItemName(rs.getString("menuItemName"));
+            tile.setGreyed(false);
+            tile.setToolTip(rs.getString("menuItemName"));
+            tile.setUrlPath(rs.getString("UrlPath"));
+            tile.setItemIconClass(rs.getString("itemIconClass"));
+            if(isEmrMenu == 0 || isEmrMenu==2) {
+                tile.setIsModal(rs.getInt("isModal"));
+                tile.setIsModule(rs.getInt("isModule"));
+                tile.setModuleName(rs.getString("modulename"));
+                tile.setJsFiles(StringUtils.trimToEmpty(rs.getString("jsFiles")));
+            }else{
+                tile.setIsModal(0);
+                tile.setIsModule(0);
+                tile.setModuleName("");
+                tile.setJsFiles("");
+            }
+            tiles.add(tile);
+        }
+        return tiles;
+    }
+
+    public List<PharmacyMenuTile> getPPlusLeftMenuTiles1(int parentId){
+        StringBuilder strSql =new StringBuilder("SELECT Id, menuItemName,UrlPath,itemIconClass,isModal, isModule,");
+        strSql.append(" modulename, jsFiles FROM pharmacy_menu WHERE isMenu =0 AND ");
+        if(parentId == 0)
+            strSql.append("parentID IS NULL");
+        else
+            strSql.append("parentID =:parentId");
+        strSql.append(" AND deleteFlag = 0 AND Id NOT IN(SELECT parentID FROM pharmacy_menu WHERE parentId IS NOT NULL) AND EMRMenuItemID IS NULL AND EMRMainMenuID IS NULL order by parentID,menuOrder ");
+        Map<String,Object> mpParams =new HashMap<>();
+        mpParams.put("parentId",parentId);
+        return namedParameterJdbcTemplate.query(strSql.toString(),mpParams, rs -> {
+            return extractTilesData(rs, 0);
+        });
+    }
+
+    public List<PharmacyMenuTile> getPPlusLeftMenuTiles2(int parentId){
+        StringBuilder strSql = new StringBuilder("SELECT am.id, mi.menuitemname as secMenuName, am.menuitemname as menuitemname, mi.UrlPath, ml.menuName, mi.itemIconClass");
+        strSql.append(" FROM pharmacy_menu am INNER JOIN menu_items mi ON am.EMRMenuItemID = mi.itemID");
+        strSql.append(" INNER JOIN menu_list ml ON mi.menuID = ml.menuID");
+        strSql.append(" WHERE am.isMenu =0 AND am.deleteFlag=0 AND mi.deleteFlag=0 AND ml.deleteflag=0 AND ");
+        if(parentId == 0)
+            strSql.append("am.parentID IS NULL  order by am.parentID,am.menuOrder ");
+        else
+            strSql.append("am.parentID =:parentId order by am.parentID,am.menuOrder ");
+        Map<String,Object> mpParams =new HashMap<>();
+        mpParams.put("parentId",parentId);
+        return namedParameterJdbcTemplate.query(strSql.toString(),mpParams, rs -> {
+            return extractTilesData(rs, 1);
+        });
+    }
+    public List<PharmacyMenuTile> getPPlusLeftMenuTiles3(int parentId){
+        StringBuilder strSql = new StringBuilder("SELECT am.id, am.menuitemname, mm.UrlPath, 'icon-label-doc' AS itemIconClass, mm.isModule, mm.moduleName,1 as isModal, mm.jsFiles, mmc.menuItemName AS menuName");
+        strSql.append(" FROM pharmacy_menu am INNER JOIN main_menu mm ON am.EMRMainMenuID = mm.itemID ");
+        strSql.append(" INNER JOIN main_menu mmc ON mm.parentID = mmc.itemID ");
+        strSql.append(" WHERE am.isMenu =0 AND am.deleteFlag=0 AND mm.deleteFlag=0 AND mmc.deleteflag=0 AND ");
+        if(parentId == 0)
+            strSql.append("am.parentID IS NULL order by am.parentID,am.menuOrder ");
+        else
+            strSql.append("am.parentID =:parentId order by am.parentID,am.menuOrder ");
+        Map<String,Object> mpParams =new HashMap<>();
+        mpParams.put("parentId",parentId);
+        return namedParameterJdbcTemplate.query(strSql.toString(),mpParams, rs -> {
+            return extractTilesData(rs, 2);
+        });
+    }
+    private static String setTooltip(String menu){
+        if(menu.equals("LOGS")){
+            return "You are not authorized to access the Logs menu. Kindly ask the admin to grant you permission to the Logs menu by enabling the security setting ‘Allow access to Logs’.";
+        }
+        return "";
+    }
+    private static List<PharmacyMenuBand> extractBandData(ResultSet rs) throws SQLException {
+        List<PharmacyMenuBand> bands = new ArrayList<>();
+        while (rs.next()) {
+            PharmacyMenuBand band = new PharmacyMenuBand();
+            band.setId(rs.getInt("Id"));
+            band.setBandName(rs.getString("menuItemName"));
+            band.setMenuItemName(rs.getString("menuItemName"));
+            band.setItemIconClass(rs.getString("itemIconClass"));
+            band.setToolTip(setTooltip(rs.getString("menuItemName")));
+            bands.add(band);
+        }
+        return bands;
+    }
+    public List<PharmacyMenuBand> getPPlusLeftMenuBands(){
+        StringBuilder strSql =new StringBuilder("SELECT Id, menuItemName, itemIconClass FROM pharmacy_menu WHERE parentID IS NULL and isMenu =0 AND Id IN (SELECT parentID FROM pharmacy_menu) order by parentID,menuOrder ");
+        return namedParameterJdbcTemplate.query(strSql.toString(), PharmacyMenuDao::extractBandData);
+    }
+}
