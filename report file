@@ -1,0 +1,503 @@
+<%@page import=" java.lang.Exception"%>
+<%@ page import="ebo.controller.EboIntegrationController" %>
+<%@ page import="ebo.util.EBOUtil" %>
+<%
+	Boolean isError=false;
+	String screenName= request.getParameter("screenName");
+	String sLaunchURL=null;
+	EboIntegrationController controller=new EboIntegrationController();
+	boolean isAuthorized=controller.isUserAuthorized(EBOUtil.getTrUserId(request));
+	if(!isAuthorized) { %>
+	<script>
+		alert("You are not authorized to access eBO reports, Please contact system administrator to get access for eBO - Access security item.")
+	</script>
+	<%}else{
+	try{
+		sLaunchURL= controller.getLaunchUrl(request);
+	}catch (Exception e){
+		isError = true;
+	}
+if(!isError && isAuthorized && ("accountLookup".equalsIgnoreCase(screenName) || "PSMDashboard".equalsIgnoreCase(screenName) || "PGMDashboard".equalsIgnoreCase(screenName))){%>
+<script>
+    var eBOReports_Menu_LaunchURL = '<%=sLaunchURL%>';
+	window.open(eBOReports_Menu_LaunchURL, "_self");
+</script>
+	<% }
+if(!isError && "inventory".equalsIgnoreCase(screenName)){ %>
+<script>
+	var eBOReports_Menu_LaunchURL = '<%=sLaunchURL%>';
+	window.location.href = eBOReports_Menu_LaunchURL;
+</script>
+<%}
+if(!isError){%>
+<script>
+    var eBOReportsMenuEBOURL = '<%=sLaunchURL%>';
+	window.open(eBOReportsMenuEBOURL, "eBOView","toolbar=yes,scrollbars=yes,resizable=yes,width=900px, height=500px");
+</script>
+<%}else{%>
+<script>
+alert("An internal server error has occurred. Please check with your practice eClinicalWorks administrator.")
+</script>
+<%}
+}%>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package ebo.controller;
+
+import ebo.factory.EboServiceFactory;
+import ebo.service.EBOService;
+import ebo.util.EBOUtil;
+
+import javax.servlet.http.HttpServletRequest;
+
+public class EboIntegrationController {
+    EBOService eBOService= EboServiceFactory.getEboServiceInstance();
+
+    public String getLaunchUrl(HttpServletRequest request){
+        String sLaunchURL = "";
+        String mediatorURL;
+            Integer userId= EBOUtil.getTrUserId(request);
+            if(eBOService!=null && isUserAuthorized(EBOUtil.getTrUserId(request))){
+                mediatorURL = eBOService.getMediatorURL(userId,eBOService.getReportUrl(request));
+                if(mediatorURL==null){
+                    sLaunchURL = eBOService.getEBOLaunchURL(userId);
+                }else{
+                    sLaunchURL=mediatorURL;
+                }
+            }
+        return sLaunchURL;
+    }
+    public boolean isUserAuthorized(int userId){
+        return eBOService.isUserAuthorized(userId);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package ebo.service;
+
+import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.text.ParseException;
+import java.util.List;
+
+import javax.servlet.http.HttpServletRequest;
+
+import ebo.pojo.EboTokens;
+import ebo.pojo.SMTPConfigResponse;
+import ebo.reports.pojo.EboIntegrationReport;
+import ebo.util.EBOSecurityUtil;
+import org.apache.xerces.dom.DocumentImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+
+import CwMobile.CwUtils;
+import catalog.CwXmlHelper;
+import catalog.Security;
+import ebo.constants.EBOConstants;
+import ebo.dao.EBODao;
+import ebo.external.EBORestInterface;
+import ebo.pojo.User;
+import ebo.security.service.EboSecurityService;
+import ebo.util.EBOException;
+import ebo.util.EBOUtil;
+import webemr.ebo.dashboard.portal.smtp.pojo.SmtpConfigModel;
+import webemr.security.EcwSecurityKeys;
+
+
+/**
+ * @author ruhulamin.shaikh
+ *
+ */
+public abstract class EBOService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(EBOService.class);
+
+    protected EboSecurityService securityService = new EboSecurityService();
+    protected EBODao dao = new EBODao();
+    protected EBORestInterface eBORestInterface = new EBORestInterface();
+    protected String cognosServer = getCognosUrl();
+
+    public abstract String getMediatorURL(int userId, String reportURL);
+    /**
+     * @param userID
+     * @return
+     * @author ruhulamin.shaikh
+     */
+    public String getEBOLaunchURL(int userID) {
+        String url = null;
+        try {
+            String cognosUrl = CwUtils.getItemKeyValue(null, EBOConstants.EBOURL_ITEMKEY_NAME);
+            LOGGER.debug("EBO URL Fetched From Item Key: " + EBOConstants.EBOURL_ITEMKEY_NAME + " is " + cognosUrl);
+            if (cognosUrl == null || (("").equals(cognosUrl.trim()))) {
+                return url;
+            }
+            if (cognosUrl.indexOf('?') != -1) {
+                cognosUrl = cognosUrl.substring(0, cognosUrl.indexOf('?'));
+            }
+            String passport = getCAMPassport(userID, cognosUrl);
+            url = cognosUrl + EBOConstants.COGNOS_ACTION + EBOConstants.COGNOS_PASSPORT_PARAM + passport;
+        }
+        finally {
+            securityService.invalidateTokens(userID);
+        }
+        return url;
+    }
+    protected String getAllCookies(int userID, String congnosURL, String algorithm)  {
+        String allCookies = null;
+        String key = "";
+        if(EBOConstants.AES_GCM_NO_PADDING.equalsIgnoreCase(algorithm)){
+            key = EcwSecurityKeys.getInstance().getSecurityKeyValue(EBOConstants.EBO_ENC_DEC_KEY);
+        } else {
+            key = EcwSecurityKeys.getInstance().getSecurityKeyValue(EBOConstants.EBO_SEC_KEY_NAME);
+        }
+        User user = dao.getUserInfo(userID);
+        prepareUserForCognos(userID, congnosURL,user);
+        if (user != null) {
+            allCookies = EBOSecurityUtil.decryptString(eBORestInterface.getAllCookies(user, congnosURL,algorithm),key,algorithm);
+        }
+        return allCookies;
+    }
+    private void prepareUserForCognos(int userID, String congnosURL, User user) {
+        if (user != null) {
+            user.setEndPoint(congnosURL);
+            user.setNameSpace(EBOConstants.EBO_NAME_SPACE);
+            user.setKey(EBOConstants.EBO_KEY);
+            if (EBOConstants.ENABLED_SSO_SAML_VALUE.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EBOConstants.ENABLED_SSO_SAML_KEY))) {
+                user.setToken(securityService.getValidToken(userID));
+            }
+        }
+    }
+
+	public  String getRoutingSessionServerURL(String cognosURL) throws MalformedURLException{
+	    String url= getEndpoint(cognosURL);
+	      url = url+EBOConstants.EB0_7_PATH+"getsessionid";
+	    return url;
+	  }
+
+	 public String getSessionId(int userID, String congnosURL) {
+		 String passport = null;
+		    try {
+		      User user = dao.getUserInfo(userID);
+		      if(user != null){
+		        user.setEndPoint(congnosURL);
+		        user.setNameSpace(EBOConstants.EBO_NAME_SPACE);
+		        user.setKey(EBOConstants.EBO_KEY);
+		        if(EBOConstants.ENABLED_SSO_SAML_VALUE.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EBOConstants.ENABLED_SSO_SAML_KEY)))
+		        {
+		        	user.setToken(securityService.getValidToken(userID));
+		        }
+		       LOGGER.debug("User Name Retrieved : "+ user.getUserName());
+		        String cognosPlatFormVersion = CwUtils.getItemKeyValue(null, EBOConstants.EBO_PLATFORM_VERSION_ITEMKEY_NAME);
+		        if(cognosPlatFormVersion != null && cognosPlatFormVersion.indexOf(EBOConstants.FUTURE_COGNOS_VERISON) != -1){
+		          String serverUrl = getRoutingSessionServerURL(congnosURL);
+		          passport = eBORestInterface.getPassport(user, serverUrl);
+		        }
+		       LOGGER.debug("Cognos Platform : "+ cognosPlatFormVersion);
+		        passport=URLEncoder.encode(passport,"UTF-8");
+		      }
+		    }
+		    catch (EBOException | MalformedURLException |UnsupportedEncodingException e) {
+		      LOGGER.error("Exception Occurred while getSessionId(): ", e);
+		      return null;
+		    }
+		    return passport;
+		  }
+
+
+    /**
+     * @param userID
+     * @param congnosURL
+     * @return
+     * @author ruhulamin.shaikh
+     */
+    public String getCAMPassport(int userID, String congnosURL) {
+        String passport = null;
+        try {
+            User user = dao.getUserInfo(userID);
+            if (user != null) {
+                user.setEndPoint(congnosURL);
+                user.setNameSpace(EBOConstants.EBO_NAME_SPACE);
+                user.setKey(EBOConstants.EBO_KEY);
+                if (EBOConstants.ENABLED_SSO_SAML_VALUE.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EBOConstants.ENABLED_SSO_SAML_KEY))) {
+                    user.setToken(securityService.getValidToken(userID));
+                }
+                LOGGER.debug("User Name Retrieved : " + user.getUserName());
+                String cognosPlatFormVersion = CwUtils.getItemKeyValue(null, EBOConstants.EBO_PLATFORM_VERSION_ITEMKEY_NAME);
+                String serverUrl = getRoutingServerURL(congnosURL);
+                passport = eBORestInterface.getPassport(user, serverUrl);
+                LOGGER.debug("Cognos Platform : " + cognosPlatFormVersion);
+                if (passport != null && !passport.isEmpty()) {
+                    LOGGER.debug("Passport  Retrieved is not empty");
+                }
+            }
+        } catch (EBOException | MalformedURLException e) {
+            LOGGER.error("Exception Occurred while getCAMPassport(): ", e);
+            throw new EBOException(e.getMessage());
+        }
+        return passport;
+    }
+
+  /**
+   * @param cognosURL
+   * @return
+   * @throws MalformedURLException
+   * @author ruhulamin.shaikh
+   */
+  public String getRoutingServerURL(String cognosURL) throws MalformedURLException{
+    String url= getEndpoint(cognosURL);
+      url = url+EBOConstants.EB0_7_PATH;
+    return url;
+  }
+
+  /**
+   * @param cognosURL
+   * @return
+   * @throws MalformedURLException
+   * @author ruhulamin.shaikh
+   */
+  private String getEndpoint(String cognosURL) throws MalformedURLException{
+    URL cognosURLObject = new URL(cognosURL);
+    String protocol = cognosURLObject.getProtocol();
+    String host = cognosURLObject.getHost();
+    int port = cognosURLObject.getPort();
+    if(port!=-1){
+     return protocol+"://"+host+":"+port;
+    }
+    return protocol+"://"+host;
+  }
+
+
+  /**@author ruhulamin.shaikh
+   * @param eBOUrl
+   * @return
+   * @throws Exception
+   */
+  public String getEBOToken(String eBOUrl,int userID ){
+    Document oDoc= new DocumentImpl();
+      Element oReturn = null;
+      Element oItem =null;
+      String passport ="";
+      String status="";
+      String eboToken=null;
+    try {
+     LOGGER.debug("EBO URL Fetched From VB : "+ eBOUrl);
+     LOGGER.debug("User ID is "+ userID);
+      if (eBOUrl == null || ( ("").equals(eBOUrl.trim()))) {
+        eBOUrl = CwUtils.getItemKeyValue(null, EBOConstants.EBOURL_ITEMKEY_NAME);
+       LOGGER.debug("EBO URL Fetched From  Item key : "+ eBOUrl);
+      }
+            oReturn = CwXmlHelper.CreateSoapHeaders(oDoc);
+            oItem = oDoc.createElement(EBOConstants.EBO_RESPONSE_ROOT_ELEMENT_NAME);
+            oReturn.appendChild(oItem);
+            User user = dao.getUserInfo(userID);
+            LOGGER.debug("User Name Retrieved : " + user.getUserName());
+            prepareUserForCognos(userID, eBOUrl, user);
+            passport = eBORestInterface.getPassport(user, eBOUrl);
+            if (passport != null && !passport.isEmpty()) {
+                LOGGER.debug("Passport  Retrieved : " + passport);
+            }
+            status = EBOConstants.STATUS_SUCCESS;
+        } catch (EBOException e) {
+            LOGGER.error("Exception Occurred while getEBOToken(): ", e);
+            status = EBOConstants.STATUS_FAILURE;
+        } finally {
+            securityService.invalidateTokens(userID);
+        }
+        try {
+            CwXmlHelper.AppendTextNode(oDoc, oItem, EBOConstants.EBO_RESPONSE_PASSPORT_ELEMENT_NAME, passport);
+            CwXmlHelper.AppendTextNode(oDoc, oReturn, EBOConstants.EBO_RESPONSE_STATUS_ELEMENT_NAME, status);
+            eboToken = CwXmlHelper.getXmlString(oDoc);
+        } catch (Exception e) {
+            LOGGER.error("Exception Occurred while getEBOToken(): ", e);
+            throw new EBOException();
+        }
+        return eboToken;
+    }
+
+    /**
+     * @param userID
+     * @return
+     * @author ruhulamin.shaikh
+     */
+    public String getEBOPassPort(int userID) {
+        String passport = null;
+        try {
+            String cognosUrl = CwUtils.getItemKeyValue(null, EBOConstants.EBOURL_ITEMKEY_NAME);
+            LOGGER.debug("EBO URL Fetched From Item Key: " + EBOConstants.EBOURL_ITEMKEY_NAME + " is " + cognosUrl);
+            LOGGER.debug("User ID is " + userID);
+            if (cognosUrl == null || (("").equals(cognosUrl.trim()))) {
+                return null;
+            }
+            if (cognosUrl.indexOf('?') != -1) {
+                cognosUrl = cognosUrl.substring(0, cognosUrl.indexOf('?'));
+            }
+            passport = getCAMPassport(userID, cognosUrl);
+        } catch (EBOException e) {
+            LOGGER.error("Exception Occurred while getEBOPassPort(): ", e);
+            return null;
+        } finally {
+            securityService.invalidateTokens(userID);
+        }
+        return passport;
+    }
+
+    /**
+     * @return
+     * @author ruhulamin.shaikh
+     */
+    public String getCognosUrl() {
+        String url = null;
+        try {
+            url = CwUtils.getItemKeyValue(null, EBOConstants.EBOURL_ITEMKEY_NAME);
+            if (url != null && url.indexOf('?') != -1) {
+                url = url.substring(0, url.indexOf('?'));
+            }
+        } catch (EBOException e) {
+            LOGGER.error("Exception Occurred while getCognosUrl(): ", e);
+            throw new EBOException(e.getMessage());
+        }
+        return url;
+    }
+
+    /**
+     * @param userId
+     * @param eBOUrl
+     * @return
+     * @throws Exception
+     * @author ruhulamin.shaikh
+     */
+    public String getEBOToken(int userId, String eBOUrl) throws MalformedURLException {
+        Document oDoc = new DocumentImpl();
+        Element oReturn = null;
+        Element oItem = null;
+        String passport = "";
+        String status = "";
+        String eboToken = null;
+        try {
+            if (eBOUrl == null || (("").equals(eBOUrl.trim()))) {
+                eBOUrl = CwUtils.getItemKeyValue(null, EBOConstants.EBOURL_ITEMKEY_NAME);
+            }
+            oReturn = CwXmlHelper.CreateSoapHeaders(oDoc);
+            oItem = oDoc.createElement(EBOConstants.EBO_RESPONSE_ROOT_ELEMENT_NAME);
+            oReturn.appendChild(oItem);
+            User user = dao.getUserInfo(userId);
+            user.setEndPoint(eBOUrl);
+            user.setNameSpace(EBOConstants.EBO_NAME_SPACE);
+            user.setKey(EBOConstants.EBO_KEY);
+            if (EBOConstants.ENABLED_SSO_SAML_VALUE.equalsIgnoreCase(CwUtils.getItemKeyValue(null, EBOConstants.ENABLED_SSO_SAML_KEY))) {
+                user.setToken(securityService.getValidToken(userId));
+            }
+            String serverUrl = getRoutingServerURL(eBOUrl);
+            passport = eBORestInterface.getPassport(user, serverUrl);
+            status = EBOConstants.STATUS_SUCCESS;
+        } catch (EBOException e) {
+            LOGGER.error("Exception Occurred while getEBOToken(): ", e);
+            status = EBOConstants.STATUS_FAILURE;
+        } finally {
+            securityService.invalidateTokens(userId);
+        }
+        try {
+
+            CwXmlHelper.AppendTextNode(oDoc, oItem, EBOConstants.EBO_RESPONSE_PASSPORT_ELEMENT_NAME, passport);
+            CwXmlHelper.AppendTextNode(oDoc, oReturn, EBOConstants.EBO_RESPONSE_STATUS_ELEMENT_NAME, status);
+            eboToken = CwXmlHelper.getXmlString(oDoc);
+        } catch (Exception e) {
+            LOGGER.error("Exception occurred while getEBOToken(): ", e);
+            throw new EBOException();
+        }
+        return eboToken;
+    }
+
+  public  boolean isUserAuthorized(int userId) {
+    boolean isAuthorized=false;
+    try{
+      isAuthorized = Security.HasSecurityAccess(null,userId, EBOConstants.EBO_SECURITY_KEY_EBOACCESS);
+      if(!isAuthorized){
+        isAuthorized = Security.HasSecurityAccess(null,userId, EBOConstants.EBO_SECURITY_KEY_EBODAYSEETACCESS);
+      }
+  }catch (Exception e) {
+    LOGGER.error("Exception Occurred while isUserAuthorized(): ", e);
+  }
+
+    return isAuthorized;
+  }
+
+  public boolean populateEBODates(){
+    boolean result=false;
+    try{
+      result = dao.populateEBODates(EBOUtil.getDayDetails(EBOConstants.EBO_CAL_START_DATE, EBOConstants.EBO_CAL_END_DATE));
+      result = dao.populateEBOTime();
+    }catch (EBOException | ParseException e) {
+      LOGGER.error("Exception Occurred while populateEBODates(): ", e);
+    }
+    return result;
+  }
+    public String getReportUrl(HttpServletRequest request) {
+        String reportURL = null;
+        String screenName = request.getParameter(EBOConstants.SCREEN_NAME);
+        if (EBOConstants.ACCOUNT_LOOKUP.equalsIgnoreCase(screenName)) {
+            reportURL = request.getParameter(EBOConstants.REPORT_URL_PARAM_NAME);
+        } else if (EBOConstants.PSM_DASHBORD_NAME.equals(screenName) || EBOConstants.PGM_DASHBOARD_NAME.equals(screenName)) {
+            String eboURL = CwUtils.getItemKeyValue(null, EBOConstants.EBOURL_ITEMKEY_NAME);
+            if (eboURL == null || eboURL.isEmpty()) {
+                eboURL = CwUtils.getItemKeyValue(null, EBOConstants.EBO_PATIENT_ITEMKEY_NAME);
+                if (eboURL == null || eboURL.isEmpty()) {
+                    eboURL = CwUtils.getItemKeyValue(null, EBOConstants.EBO_PATIENT_STATEMENT_URL_ITEMKEY_NAME);
+                }
+            }
+            if (eboURL != null && !eboURL.isEmpty()) {
+                if (eboURL.indexOf(EBOConstants.QUERY_PARAM_SIGN) != -1) {
+                    eboURL = eboURL.substring(0, eboURL.indexOf(EBOConstants.QUERY_PARAM_SIGN));
+                }
+                reportURL = eboURL + EBOConstants.QUERY_PARAM_SIGN + request.getParameter(EBOConstants.REPORT_URL_PARAM_NAME);
+            }
+        }else if (EBOConstants.INVENTORY.equalsIgnoreCase(screenName)) {
+            reportURL = request.getParameter(EBOConstants.REPORT_URL_PARAM_NAME);
+        }
+        return reportURL;
+    }
+    public abstract List<EboIntegrationReport> generateEboIntegrationReportList(List<EboIntegrationReport> reports, int userId,String toolBarOption);
+    public abstract EboTokens generateEboTokens(int userId);
+    public abstract String generateMediatorUrl(String reportURL, EboTokens eboTokens);
+    public abstract SMTPConfigResponse validateSmtpRequest(SmtpConfigModel smtpConfigModel, int userID, String congnosURL) ;
+}
